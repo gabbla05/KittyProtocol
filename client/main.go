@@ -160,7 +160,11 @@ func connectToPeer(ip string, port int, tlsConf *tls.Config) {
 			break
 		}
 
-		dataMsg := protocol.UniversalFrame{Type: "DATA", MsgID: msgCounter, Payload: text, HMAC: "signature_123"}
+		dataMsg := protocol.UniversalFrame{
+			Type:    "DATA",
+			MsgID:   msgCounter,
+			Payload: text,
+		}
 		stream.Write(dataMsg.ToJSON())
 		msgCounter++
 	}

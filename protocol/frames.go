@@ -8,8 +8,8 @@ import (
 // UniversalFrame is a base structure for all KittyProtocol message types.
 // "omitempty" ensures empty fields are not sent over the network.
 type UniversalFrame struct {
-	Type    string `json:"type"`   // e.g., HELLO, AUTH, DATA, ERROR
-	MsgID   int    `json:"msg_id"` // Protects against Replay attacks
+	Type    string `json:"type"`
+	MsgID   int    `json:"msg_id"`
 	Version string `json:"version,omitempty"`
 	Status  string `json:"status,omitempty"`
 	User    string `json:"user,omitempty"`
@@ -19,9 +19,9 @@ type UniversalFrame struct {
 	IP      string `json:"ip,omitempty"`
 	Port    int    `json:"port,omitempty"`
 	Payload string `json:"payload,omitempty"`
-	HMAC    string `json:"hmac,omitempty"`
-	Code    string `json:"code,omitempty"`
-	Desc    string `json:"desc,omitempty"`
+	// HMAC został usunięty - integralność zapewnia QUIC (TLS 1.3 AEAD)
+	Code string `json:"code,omitempty"`
+	Desc string `json:"desc,omitempty"`
 }
 
 // ToJSON serializes the struct into a JSON byte array.
