@@ -44,3 +44,23 @@ func (rl *RateLimiter) Allow() bool {
 	}
 	return false
 }
+
+// AuthTimer to timer dla autoryzacji (20s)
+type AuthTimer struct {
+	timer *time.Timer
+}
+
+// StartAuthTimer uruchamia timer autoryzacji na 20 sekund.
+func StartAuthTimer(onTimeout func()) *AuthTimer {
+	at := &AuthTimer{
+		timer: time.AfterFunc(20*time.Second, onTimeout),
+	}
+	return at
+}
+
+// Stop zatrzymuje timer.
+func (at *AuthTimer) Stop() {
+	if at.timer != nil {
+		at.timer.Stop()
+	}
+}
