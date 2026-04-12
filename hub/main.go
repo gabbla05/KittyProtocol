@@ -10,21 +10,16 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
-// UserInfo stores logged-in users' data in memory (stateless approach).
-type UserInfo struct {
-	IP    string
-	Port  int
-	Token string
-}
-
-var onlineUsers = make(map[string]UserInfo)
+// Mapa aktywnych sesji: User -> Strumień danych
+var activeSessions = make(map[string]*quic.Stream)
 
 func main() {
-	// Load TLS certificates required by QUIC
+	// Ścieżki do certyfikatów muszą być poprawne! [cite: 577]
 	cert, err := tls.LoadX509KeyPair("certs/cert.pem", "certs/key.pem")
 	if err != nil {
 		log.Fatal("TLS Cert loading error:", err)
 	}
+
 	tlsConf := &tls.Config{
 		Certificates: []tls.Certificate{cert},
 		NextProtos:   []string{"kitty-quic"},
@@ -34,72 +29,66 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("🐈 KittyProtocol Hub (QUIC) is listening on 127.0.0.1:9999...")
+	fmt.Println("🐈 KittyProtocol Hub (Router) is listening on 127.0.0.1:9999...")
 
 	for {
 		conn, err := listener.Accept(context.Background())
 		if err != nil {
 			continue
 		}
+		go handleClient(conn)
+	}
+}
 
-		// Zaczynamy nową goroutine bez argumentów (Go 1.22+ bezpiecznie przechwytuje conn)
-		go func() {
-			stream, err := conn.AcceptStream(context.Background())
-			if err != nil {
-				return
-			}
-			defer stream.Close()
+func handleClient(conn *quic.Conn) {
 
-			buf := make([]byte, 2048)
+	for {
+		// Akceptujemy strumień wewnątrz połączenia
+		stream, err := conn.AcceptStream(context.Background())
+		if err != nil {
+			return
+		}
+
+		go func(s *quic.Stream) {
+			defer s.Close()
+			buf := make([]byte, 4096)
 			for {
-				n, err := stream.Read(buf)
+				n, err := s.Read(buf)
 				if err != nil {
-					return // Klient się rozłączył
+					return
 				}
 
 				frame, err := protocol.ParseFrame(buf[:n])
 				if err != nil {
-					errFrame := protocol.UniversalFrame{Type: "ERROR", Code: "ERR_02", Desc: err.Error()}
-					stream.Write(errFrame.ToJSON())
+					// ERR_02 Format Error [cite: 584, 433]
+					resp := protocol.UniversalFrame{Type: "ERROR", Code: "ERR_02", Desc: err.Error()}
+					s.Write(resp.ToJSON())
 					continue
 				}
-
-				fmt.Printf("[Hub] Received from %s: %s\n", conn.RemoteAddr(), frame.Type)
 
 				switch frame.Type {
 				case "HELLO":
 					resp := protocol.UniversalFrame{Type: "MEOW_OK", MsgID: frame.MsgID, Status: "Ready for auth"}
-					stream.Write(resp.ToJSON())
+					s.Write(resp.ToJSON())
 
 				case "AUTH":
-					token := "tok_" + frame.User + "_123"
+					// Task 6: Mock DB [cite: 659]
+					activeSessions[frame.User] = s
+					resp := protocol.UniversalFrame{Type: "MEOW_OK", MsgID: frame.MsgID, Status: "Logged in"}
+					s.Write(resp.ToJSON())
+					fmt.Printf("[Hub] User %s logged in\n", frame.User)
 
-					// Dynamiczne przypisanie portu P2P zadeklarowanego przez klienta
-					clientPort := frame.Port
-					if clientPort == 0 {
-						clientPort = 8888 // Fallback
-					}
-
-					onlineUsers[frame.User] = UserInfo{
-						IP:    "127.0.0.1",
-						Port:  clientPort,
-						Token: token,
-					}
-					resp := protocol.UniversalFrame{Type: "MEOW_OK", MsgID: frame.MsgID, Token: token}
-					stream.Write(resp.ToJSON())
-					fmt.Printf("[Hub] User '%s' successfully authenticated on port %d!\n", frame.User, clientPort)
-
-				case "LOOKUP":
-					info, exists := onlineUsers[frame.Target]
+				case "DATA":
+					// Message Broker Logic [cite: 586-591]
+					targetStream, exists := activeSessions[frame.Target]
 					if exists {
-						resp := protocol.UniversalFrame{Type: "MEOW_OK", MsgID: frame.MsgID, IP: info.IP, Port: info.Port}
-						stream.Write(resp.ToJSON())
+						targetStream.Write(buf[:n]) // Forward zaszyfrowanej ramki
 					} else {
-						resp := protocol.UniversalFrame{Type: "ERROR", MsgID: frame.MsgID, Code: "ERR_09", Desc: "Recipient Offline"}
-						stream.Write(resp.ToJSON())
+						resp := protocol.UniversalFrame{Type: "ERROR", Code: "ERR_15", Desc: "Target Offline"}
+						s.Write(resp.ToJSON())
 					}
 				}
 			}
-		}()
+		}(stream)
 	}
 }

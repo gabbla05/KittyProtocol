@@ -5,39 +5,35 @@ import (
 	"fmt"
 )
 
-// UniversalFrame is a base structure for all KittyProtocol message types.
-// "omitempty" ensures empty fields are not sent over the network.
+// UniversalFrame to podstawowa struktura dla wszystkich typów komunikatów.
 type UniversalFrame struct {
-	Type    string `json:"type"`
-	MsgID   int    `json:"msg_id"`
-	Version string `json:"version,omitempty"`
-	Status  string `json:"status,omitempty"`
-	User    string `json:"user,omitempty"`
-	Passw   string `json:"passw,omitempty"`
-	Token   string `json:"token,omitempty"`
-	Target  string `json:"target,omitempty"`
-	IP      string `json:"ip,omitempty"`
-	Port    int    `json:"port,omitempty"`
-	Payload string `json:"payload,omitempty"`
-	// HMAC został usunięty - integralność zapewnia QUIC (TLS 1.3 AEAD)
-	Code string `json:"code,omitempty"`
-	Desc string `json:"desc,omitempty"`
+	Type    string `json:"type"`              // np. "HELLO", "AUTH", "DATA", "ERROR"
+	MsgID   int64  `json:"msg_id"`            // Timestamp jako identyfikator [cite: 233]
+	User    string `json:"user,omitempty"`    // Dla AUTH
+	Pass    string `json:"pass,omitempty"`    // Dla AUTH
+	Token   string `json:"token,omitempty"`   // Token sesyjny po AUTH
+	Target  string `json:"target,omitempty"`  // Adresat ramki DATA lub GET_STATUS
+	Sender  string `json:"sender,omitempty"`  // Wstrzykiwane przez Hub dla odbiorcy [cite: 590]
+	Payload string `json:"payload,omitempty"` // Zaszyfrowana treść (Base64)
+	HMAC    string `json:"hmac,omitempty"`    // Integralność E2E [cite: 248]
+	Status  string `json:"status,omitempty"`  // np. "Logged in", "Ready for auth"
+	Code    string `json:"code,omitempty"`    // Kod błędu (np. ERR_02)
+	Desc    string `json:"desc,omitempty"`    // Opis błędu
 }
 
-// ToJSON serializes the struct into a JSON byte array.
 func (f *UniversalFrame) ToJSON() []byte {
 	bytes, _ := json.Marshal(f)
 	return bytes
 }
 
-// ParseFrame strictly validates the incoming JSON (ERR_02 format error).
+// ParseFrame rygorystycznie waliduje format JSON (Task 8 Gaby)[cite: 584].
 func ParseFrame(data []byte) (*UniversalFrame, error) {
 	var frame UniversalFrame
 	if err := json.Unmarshal(data, &frame); err != nil {
-		return nil, fmt.Errorf("JSON parsing error")
+		return nil, fmt.Errorf("ERR_02: JSON parsing error")
 	}
 	if frame.Type == "" || frame.MsgID == 0 {
-		return nil, fmt.Errorf("missing required fields: type or msg_id")
+		return nil, fmt.Errorf("ERR_02: missing required fields (type/msg_id)")
 	}
 	return &frame, nil
 }
