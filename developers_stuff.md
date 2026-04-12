@@ -1,6 +1,10 @@
 hub:  go run hub/main.go
 clients:  go run client/main.go
+
+
 <img width="608" height="250" alt="image" src="https://github.com/user-attachments/assets/b19229c1-ca5a-47ce-b1e6-e49c5519362f" />
+
+
 Aktualne zachowanie aplikacji
 (Status: Oczekiwanie na ACK
 - Opis: Po wysłaniu wiadomości przez klienta, w konsoli pojawia się komunikat o oczekiwaniu na potwierdzenie, który po 5 sekundach zgłasza timeout.Przyczyna techniczna: Jest to poprawne działanie timera z Taska 14. Ponieważ Hub nie posiada jeszcze zaimplementowanego routingu (Task 7), wiadomość nie jest przekazywana dalej, a co za tym idzie – nadawca nigdy nie otrzymuje ramki MEOW_OK.
@@ -16,17 +20,17 @@ KittyProtocol to bezpieczny, bezstanowy system wymiany wiadomości oparty na **Q
 * **E2EE**: Treść wiadomości jest szyfrowana end-to-end; Hub widzi jedynie metadane niezbędne do routingu.
 
 ## 2. Struktura Projektu (Rafinacja Gołsona)
-[cite_start]Projekt został podzielony na moduły wewnątrz folderu `internal/`, aby odizolować logikę transportową od zabezpieczeń[cite: 1333, 1334].
+Projekt został podzielony na moduły wewnątrz folderu `internal/`, aby odizolować logikę transportową od zabezpieczeń.
 
 ```bash
 ├── certs/              # Certyfikaty TLS 1.3 dla QUIC
-├── client/             # Implementacja aplikacji klienckiej [cite: 1305]
-├── hub/                # Główny serwer (Router) [cite: 1249]
-├── internal/           # Logika biznesowa (Taski Gołsona) [cite: 1333]
+├── client/             # Implementacja aplikacji klienckiej
+├── hub/                # Główny serwer (Router) 
+├── internal/           # Logika biznesowa (Taski Gołsona) 
 │   ├── auth/           # Weryfikacja poświadczeń (Mock DB + bcrypt) 
 │   ├── clientutils/    # Narzędzia pomocnicze klienta (Truncation, Timery) 
 │   └── protection/     # Mechanizmy ochronne Huba (Rate Limiter, Session Manager) 
-└── protocol/           # Definicje ramek JSON (Single Source of Truth) [cite: 1271, 1274]
+└── protocol/           # Definicje ramek JSON (Single Source of Truth) 
 
 ```
 3. Status Implementacji (Taski Gołsona)
