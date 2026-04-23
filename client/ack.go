@@ -83,7 +83,7 @@ func sendMessage(stream *quic.Stream, target, text string, pending map[int64]cha
 		},
 		Target:  target,
 		Payload: safe,
-		// MAC: (zostawiamy puste, to zadanie Michała w MB/E2EE) [cite: 2163]
+		MAC:     "placeholder",
 	}
 
 	b, _ := json.Marshal(frame)
