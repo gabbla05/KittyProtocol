@@ -11,9 +11,9 @@ type BaseFrame struct {
 	MsgID int64  `json:"msg_id"` // Timestamp jako unikalny ID [cite: 2146]
 }
 
-// 1. HELLO - Inicjalizacja sesji [cite: 2130]
 type HelloFrame struct {
 	BaseFrame
+	Version string `json:"version"` // np. "1.0"
 }
 
 // 2. AUTH - Uwierzytelnianie [cite: 2132]
