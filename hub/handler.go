@@ -12,8 +12,6 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
-// handleClient manages the entire lifecycle of a single client connection.
-// It implements HELLO → AUTH, rate limiting, and basic DATA handling.
 func handleClient(conn *quic.Conn) {
 	stream, err := conn.AcceptStream(context.Background())
 	if err != nil {
@@ -34,10 +32,16 @@ func handleClient(conn *quic.Conn) {
 			return
 		}
 
-		// TASK 8: Wstępna walidacja typu i pobranie MsgID [cite: 78, 120]
+		// TASK 8: Wstępna walidacja typu i obecności pól bazowych (type, msg_id)
 		typeName, _, perr := protocol.GetFrameType(buf[:n])
 		if perr != nil {
 			sendError(stream, "ERR_02", perr.Error())
+			continue
+		}
+
+		// TASK 8: Sprawdzenie czy typ ramki jest znany protokołowi
+		if !protocol.IsValidType(typeName) {
+			sendError(stream, "ERR_02", "Unknown frame type: "+typeName)
 			continue
 		}
 
@@ -47,10 +51,10 @@ func handleClient(conn *quic.Conn) {
 			authTimer = handleHELLO(stream, conn)
 
 		case "AUTH":
-			// TASK 10: Użycie konkretnej struktury AuthFrame [cite: 83]
-			var frame protocol.AuthFrame
-			if err := json.Unmarshal(buf[:n], &frame); err != nil {
-				sendError(stream, "ERR_02", "Invalid AUTH format")
+			// TASK 8: Rygorystyczny parser sprawdzający obecność user i pass
+			frame, err := protocol.ParseAuthFrame(buf[:n])
+			if err != nil {
+				sendError(stream, "ERR_02", err.Error())
 				continue
 			}
 
@@ -65,7 +69,7 @@ func handleClient(conn *quic.Conn) {
 			session = protection.NewSession(frame.User, conn)
 			globalSessions.Add(frame.User, session)
 
-			// TASK 10: Wysłanie dedykowanej ramki MeowOkFrame
+			// TASK 10: Wysłanie dedykowanej ramki MeowOkFrame [cite: 133]
 			ok := protocol.MeowOkFrame{
 				BaseFrame: protocol.BaseFrame{
 					Type:  "MEOW_OK",
@@ -82,24 +86,23 @@ func handleClient(conn *quic.Conn) {
 			}
 
 		case "DATA":
-			// TASK 10: Użycie konkretnej struktury DataFrame [cite: 90-94]
-			var frame protocol.DataFrame
-			if err := json.Unmarshal(buf[:n], &frame); err != nil {
-				sendError(stream, "ERR_02", "Invalid DATA format")
+			// TASK 8: Rygorystyczny parser sprawdzający payload i MAC [cite: 81, 117]
+			frame, err := protocol.ParseDataFrame(buf[:n])
+			if err != nil {
+				sendError(stream, "ERR_02", err.Error())
 				continue
 			}
 
 			if session == nil {
-				sendError(stream, "ERR_01", "DATA before AUTH")
+				sendError(stream, "ERR_01", "DATA before AUTH") // [cite: 278]
 				continue
 			}
 			if !session.Limiter.Allow() {
-				sendError(stream, "ERR_07", "Rate limit exceeded")
+				sendError(stream, "ERR_07", "Rate limit exceeded") // [cite: 278]
 				continue
 			}
 
-			// For now, we just acknowledge DATA locally.
-			// Later, MB will route this to the target user.
+			// Aplikacyjne potwierdzenie (ACK) - [cite: 48, 55]
 			ack := protocol.MeowOkFrame{
 				BaseFrame: protocol.BaseFrame{
 					Type:  "MEOW_OK",
@@ -109,6 +112,10 @@ func handleClient(conn *quic.Conn) {
 			}
 			b, _ := json.Marshal(ack)
 			stream.Write(b)
+
+		case "BYE":
+			// Celowe zakończenie sesji [cite: 72]
+			return
 		}
 	}
 }

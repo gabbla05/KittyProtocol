@@ -74,3 +74,37 @@ func GetFrameType(data []byte) (string, int64, error) {
 	}
 	return base.Type, base.MsgID, nil
 }
+
+// IsValidType sprawdza, czy typ wiadomości znajduje się na liście dozwolonych [cite: 4254]
+func IsValidType(t string) bool {
+	switch t {
+	case "HELLO", "AUTH", "DATA", "MEOW_OK", "ERROR", "GET_STATUS", "STATUS_RES", "PING", "BYE":
+		return true
+	}
+	return false
+}
+
+// ParseAuthFrame rygorystycznie waliduje ramkę logowania (Task 8) [cite: 4254]
+func ParseAuthFrame(data []byte) (*AuthFrame, error) {
+	var f AuthFrame
+	if err := json.Unmarshal(data, &f); err != nil {
+		return nil, fmt.Errorf("ERR_02: Invalid JSON format")
+	}
+	if f.User == "" || f.Pass == "" {
+		return nil, fmt.Errorf("ERR_02: Missing user or pass in AUTH frame")
+	}
+	return &f, nil
+}
+
+// ParseDataFrame waliduje ramkę z wiadomością (Task 8) [cite: 4254]
+func ParseDataFrame(data []byte) (*DataFrame, error) {
+	var f DataFrame
+	if err := json.Unmarshal(data, &f); err != nil {
+		return nil, fmt.Errorf("ERR_02: Invalid JSON format")
+	}
+	// Payload i MAC są krytyczne dla E2EE
+	if f.Payload == "" || f.MAC == "" {
+		return nil, fmt.Errorf("ERR_02: Missing payload or MAC in DATA frame")
+	}
+	return &f, nil
+}
