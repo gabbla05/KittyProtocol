@@ -81,6 +81,13 @@
  - **TruncateMessage** ensures plaintext stays below safe limit before encryption.
  - **ACK Timer (5s)** marks messages as undelivered if MEOW_OK is not received.
  
+### 3.4 Task 27 – Strict JSON Validation (Parser)
+
+- Implemented rigorous frame parsing in the `protocol` package.
+- `GetFrameType()` immediately verifies if the payload is valid JSON and contains strictly required fields (`type` out of 9 allowed enums and `msg_id`).
+- Fails fast and returns `ERR_02` for missing fields, unknown types, or corrupted JSON structures. This prevents panics and allows the Hub to reject the frame immediately.
+
+
  ---
  
  ## 4. Current Behavior (Stage 1)
@@ -129,26 +136,21 @@
  
  ## 5. Test Coverage (Stage 1)
  
- Tests implemented:
- 
- - `RateLimiter` (token refill, exhaustion)
- - `SessionManager` (idle cleanup)
- - `ParseFrame` (valid/invalid JSON)
- - `TruncateMessage` (boundary conditions)
- 
- Current coverage:
- 
- ```
- internal/clientutils     50%
- internal/protection      63%
- protocol                 75%
- ```
- 
- Additional tests planned:
- 
- - SessionManager concurrency tests
- - ACK timer cancellation tests
- - HELLO/AUTH integration tests (after routing)
+ ## 5. Test Coverage (Stage 1)
+
+Tests implemented:
+
+- `RateLimiter` (token refill, exhaustion)
+- `SessionManager` (idle cleanup)
+- `ParseFrame` / `GetFrameType` (strict validation, missing fields, unknown types, ERR_02 handling)
+- `TruncateMessage` (boundary conditions)
+
+Current coverage:
+
+```text
+internal/clientutils     50%
+internal/protection      63%
+protocol                 100%
  
  ---
  
@@ -189,18 +191,18 @@
  
  ### 7.1 Start Hub
  ```
- go run hub/main.go
+ go run ./hub
  ```
  
  ### 7.2 Start Client
  ```
- go run client/main.go
+ go run ./client
  ```
  
  ### 7.3 Multiple Clients
  ```
- go run client/main.go -port 9001
- go run client/main.go -port 9002
+ go run ./client -port 9001
+ go run ./client -port 9002
  ```
  
  ---
@@ -214,6 +216,7 @@
  - Session management stable
  - Rate limiting stable
  - ACK timers stable
+ - Strict JSON validation prevents structural attacks
  - Test suite implemented
  
  System is ready for Stage 2:
