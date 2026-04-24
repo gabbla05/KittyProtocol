@@ -5,77 +5,82 @@ import (
 	"fmt"
 )
 
-// BaseFrame zawiera pola wspólne dla każdej ramki [cite: 2143]
+// BaseFrame zawiera pola wspólne dla każdej ramki
 type BaseFrame struct {
-	Type  string `json:"type"`   // np. "HELLO", "AUTH", "DATA" [cite: 2144]
-	MsgID int64  `json:"msg_id"` // Timestamp jako unikalny ID [cite: 2146]
+	Type  string `json:"type"`   // np. "HELLO", "AUTH", "DATA"
+	MsgID int64  `json:"msg_id"` // Timestamp jako unikalny ID
 }
 
+// 1. HELLO - Przywitanie
 type HelloFrame struct {
 	BaseFrame
 	Version string `json:"version"` // np. "1.0"
 }
 
-// 2. AUTH - Uwierzytelnianie [cite: 2132]
+// 2. AUTH - Uwierzytelnianie
 type AuthFrame struct {
 	BaseFrame
-	User string `json:"user"` // Login użytkownika [cite: 2150]
-	Pass string `json:"pass"` // Hasło użytkownika [cite: 2150]
+	User string `json:"user"` // Login użytkownika
+	Pass string `json:"pass"` // Hasło użytkownika
 }
 
-// 3. DATA - Przesyłanie ładunku E2EE [cite: 2136]
+// 3. DATA - Przesyłanie ładunku E2EE
 type DataFrame struct {
 	BaseFrame
-	Target  string `json:"target,omitempty"` // Odbiorca (u nadawcy) [cite: 2150]
-	Sender  string `json:"sender,omitempty"` // Nadawca (u odbiorcy - dodawane przez Hub) [cite: 2224]
-	Payload string `json:"payload"`          // Zaszyfrowany Base64 [cite: 2160]
-	MAC     string `json:"mac"`              // HMAC dla integralności E2EE [cite: 2161]
+	Target  string `json:"target,omitempty"` // Odbiorca (u nadawcy)
+	Sender  string `json:"sender,omitempty"` // Nadawca (u odbiorcy - dodawane przez Hub)
+	Payload string `json:"payload"`          // Zaszyfrowany Base64
+	MAC     string `json:"mac"`              // HMAC dla integralności E2EE
 }
 
-// 4. MEOW_OK - Potwierdzenie aplikacyjne (ACK) [cite: 2137]
+// 4. MEOW_OK - Potwierdzenie aplikacyjne (ACK)
 type MeowOkFrame struct {
 	BaseFrame
-	Status string `json:"status,omitempty"` // Opcjonalny opis statusu [cite: 2196]
+	Status string `json:"status,omitempty"` // Opcjonalny opis statusu
 }
 
-// 5. ERROR - Ramka błędu [cite: 2138]
+// 5. ERROR - Ramka błędu
 type ErrorFrame struct {
 	BaseFrame
-	Code string `json:"code"` // Kod błędu (np. ERR_02) [cite: 2151]
-	Desc string `json:"desc"` // Opis błędu [cite: 2151]
+	Code string `json:"code"` // Kod błędu (np. ERR_02)
+	Desc string `json:"desc"` // Opis błędu
 }
 
-// 6. GET_STATUS - Zapytanie o status użytkownika [cite: 2133]
+// 6. GET_STATUS - Zapytanie o status użytkownika
 type GetStatusFrame struct {
 	BaseFrame
-	Target string `json:"target"` // Kogo sprawdzamy [cite: 2150]
+	Target string `json:"target"` // Kogo sprawdzamy
 }
 
-// 7. STATUS_RES - Odpowiedź o statusie [cite: 2135]
+// 7. STATUS_RES - Odpowiedź o statusie
 type StatusResFrame struct {
 	BaseFrame
-	Target string `json:"target"` // Identyfikator sprawdzanego [cite: 2207]
-	Status string `json:"status"` // "online" lub "offline" [cite: 2207]
+	Target string `json:"target"` // Identyfikator sprawdzanego
+	Status string `json:"status"` // "online" lub "offline"
 }
 
-// 8. PING i 9. BYE - Keep-alive i zakończenie [cite: 2138, 2139]
+// 8. PING i 9. BYE - Keep-alive i zakończenie
 type PingFrame struct{ BaseFrame }
 type ByeFrame struct{ BaseFrame }
 
-// GetFrameType pozwala sprawdzić typ ramki przed pełnym parsowaniem (Task 8)
+// GetFrameType pozwala sprawdzić typ ramki przed pełnym parsowaniem i rygorystycznie odrzuca błędy
 func GetFrameType(data []byte) (string, int64, error) {
 	var base BaseFrame
 	if err := json.Unmarshal(data, &base); err != nil {
 		return "", 0, fmt.Errorf("ERR_02: JSON parsing error")
 	}
-	// Rygorystyczna walidacja pól wymaganych (Task 8)
+	// Rygorystyczna walidacja pól wymaganych
 	if base.Type == "" || base.MsgID == 0 {
 		return "", 0, fmt.Errorf("ERR_02: missing required fields (type/msg_id)")
+	}
+	// Weryfikacja, czy typ zgadza się z obsługiwanym enumem
+	if !IsValidType(base.Type) {
+		return "", 0, fmt.Errorf("ERR_02: unknown or invalid frame type")
 	}
 	return base.Type, base.MsgID, nil
 }
 
-// IsValidType sprawdza, czy typ wiadomości znajduje się na liście dozwolonych [cite: 4254]
+// IsValidType sprawdza, czy typ wiadomości znajduje się na liście dozwolonych
 func IsValidType(t string) bool {
 	switch t {
 	case "HELLO", "AUTH", "DATA", "MEOW_OK", "ERROR", "GET_STATUS", "STATUS_RES", "PING", "BYE":
@@ -84,7 +89,16 @@ func IsValidType(t string) bool {
 	return false
 }
 
-// ParseAuthFrame rygorystycznie waliduje ramkę logowania (Task 8) [cite: 4254]
+// ParseHelloFrame waliduje ramkę startową
+func ParseHelloFrame(data []byte) (*HelloFrame, error) {
+	var f HelloFrame
+	if err := json.Unmarshal(data, &f); err != nil {
+		return nil, fmt.Errorf("ERR_02: Invalid JSON format")
+	}
+	return &f, nil
+}
+
+// ParseAuthFrame rygorystycznie waliduje ramkę logowania
 func ParseAuthFrame(data []byte) (*AuthFrame, error) {
 	var f AuthFrame
 	if err := json.Unmarshal(data, &f); err != nil {
@@ -96,15 +110,50 @@ func ParseAuthFrame(data []byte) (*AuthFrame, error) {
 	return &f, nil
 }
 
-// ParseDataFrame waliduje ramkę z wiadomością (Task 8) [cite: 4254]
+// ParseDataFrame waliduje ramkę z wiadomością i weryfikuje niezbędne do E2EE pola
 func ParseDataFrame(data []byte) (*DataFrame, error) {
 	var f DataFrame
 	if err := json.Unmarshal(data, &f); err != nil {
 		return nil, fmt.Errorf("ERR_02: Invalid JSON format")
 	}
-	// Payload i MAC są krytyczne dla E2EE
 	if f.Payload == "" || f.MAC == "" {
 		return nil, fmt.Errorf("ERR_02: Missing payload or MAC in DATA frame")
+	}
+	return &f, nil
+}
+
+// ParseErrorFrame waliduje formatkę błędu
+func ParseErrorFrame(data []byte) (*ErrorFrame, error) {
+	var f ErrorFrame
+	if err := json.Unmarshal(data, &f); err != nil {
+		return nil, fmt.Errorf("ERR_02: Invalid JSON format")
+	}
+	if f.Code == "" {
+		return nil, fmt.Errorf("ERR_02: Missing error code in ERROR frame")
+	}
+	return &f, nil
+}
+
+// ParseGetStatusFrame waliduje zapytanie o status
+func ParseGetStatusFrame(data []byte) (*GetStatusFrame, error) {
+	var f GetStatusFrame
+	if err := json.Unmarshal(data, &f); err != nil {
+		return nil, fmt.Errorf("ERR_02: Invalid JSON format")
+	}
+	if f.Target == "" {
+		return nil, fmt.Errorf("ERR_02: Missing target in GET_STATUS frame")
+	}
+	return &f, nil
+}
+
+// ParseStatusResFrame waliduje odpowiedź o statusie
+func ParseStatusResFrame(data []byte) (*StatusResFrame, error) {
+	var f StatusResFrame
+	if err := json.Unmarshal(data, &f); err != nil {
+		return nil, fmt.Errorf("ERR_02: Invalid JSON format")
+	}
+	if f.Target == "" || f.Status == "" {
+		return nil, fmt.Errorf("ERR_02: Missing target or status in STATUS_RES frame")
 	}
 	return &f, nil
 }
