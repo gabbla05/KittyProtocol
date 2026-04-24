@@ -87,6 +87,12 @@
 - `GetFrameType()` immediately verifies if the payload is valid JSON and contains strictly required fields (`type` out of 9 allowed enums and `msg_id`).
 - Fails fast and returns `ERR_02` for missing fields, unknown types, or corrupted JSON structures. This prevents panics and allows the Hub to reject the frame immediately.
 
+### 3.5 Task 32 – TLS 1.3 Certificate Management (certmanager)
+
+- Implemented `certmanager` package in `internal/certmanager`.
+- Automatically generates self-signed ECDSA (P-256) certificates for local testing if they are missing in the `certs/` directory.
+- Provides `SetupTLSConfig(certPath, keyPath)` which enforces TLS 1.3 and ALPN (`kitty-quic-v1`), returning a ready-to-use `*tls.Config` for the Hub's QUIC listener.
+- Decouples cryptography setup from the main networking logic, allowing the Message Broker (MB) to easily import it for Task 4.
 
  ---
  
