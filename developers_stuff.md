@@ -142,7 +142,7 @@
  
  ## 5. Test Coverage (Stage 1)
  
- ## 5. Test Coverage (Stage 1)
+## 5. Test Coverage (Stage 1)
 
 Tests implemented:
 
@@ -150,15 +150,21 @@ Tests implemented:
 - `SessionManager` (idle cleanup)
 - `ParseFrame` / `GetFrameType` (strict validation, missing fields, unknown types, ERR_02 handling)
 - `TruncateMessage` (boundary conditions)
+- `CertManager` (certificate generation, file reading, TLS 1.3 enforcement)
 
 Current coverage:
 
 ```text
 internal/clientutils     50%
 internal/protection      63%
+internal/certmanager     100%
 protocol                 100%
- 
- ---
+
+To run the protocol and certmanager test suites:
+```
+go test ./protocol -v
+go test ./internal/certmanager -v
+```
  
  ## 6. Next Steps (Stage 2 – MB + Gaba)
  
