@@ -18,3 +18,6 @@ func CheckCredentials(user, pass string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(pass))
 	return err == nil
 }
+
+
+/* Idle Timeout (60s): Mechanizm, który monitoruje każdą sesję. Jeśli przez 60 sekund od klienta nie nadejdzie żadna ramka DATA ani PING, Hub musi jednostronnie zamknąć to połączenie.Rate Limiting (Token Bucket): Musisz zaimplementować faktyczną logikę ograniczania ruchu (10 wiadomości na sekundę na użytkownika / 100 na minutę z IP). Sam komentarz TODO nie obroni serwera przed spamem.Czyszczenie mapy activeSessions: Musisz dopilnować, by w przypadku jakiegokolwiek błędu lub timeoutu, użytkownik był usuwany z mapy w RAM, żeby nie wyciekała pamięć. */
