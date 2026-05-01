@@ -14,7 +14,7 @@ import (
 func main() {
 	tlsConf := &tls.Config{
 		InsecureSkipVerify: true,
-		NextProtos:         []string{"kitty-quic"},
+		NextProtos:         []string{"kitty-quic-v1"},
 	}
 
 	reader := bufio.NewReader(os.Stdin)

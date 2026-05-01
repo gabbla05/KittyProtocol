@@ -113,6 +113,9 @@ func handleClient(conn *quic.Conn) {
 			b, _ := json.Marshal(ack)
 			stream.Write(b)
 
+			session.LastActive = time.Now()
+
+
 		case "BYE":
 			// Celowe zakończenie sesji [cite: 72]
 			return
