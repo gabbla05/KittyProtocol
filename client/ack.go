@@ -22,7 +22,7 @@ func startReceiverLoop(stream *quic.Stream) (map[int64]chan struct{}, *sync.Mute
 			n, err := stream.Read(buf)
 			if err != nil {
 				fmt.Println("\n[Client] Connection closed by server:", err)
-    			fmt.Println("[System] Returning to disconnected state.")
+				fmt.Println("[System] Returning to disconnected state.")
 				return
 			}
 

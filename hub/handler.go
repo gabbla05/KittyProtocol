@@ -115,6 +115,35 @@ func handleClient(conn *quic.Conn) {
 
 			session.LastActive = time.Now()
 
+			// --- MESSAGE BROKER (Task 7) ---
+
+			// 1. Znajdź sesję odbiorcy
+			targetSess, ok := globalSessions.Get(frame.Target)
+			if !ok {
+				sendError(stream, "ERR_15", "Receiver offline")
+				continue
+			}
+
+			// 2. Otwórz strumień do odbiorcy
+			targetStream, err := targetSess.Conn.OpenStreamSync(context.Background())
+			if err != nil {
+				sendError(stream, "ERR_10", "Routing failed")
+				continue
+			}
+
+			// 3. Przekaż ramkę DATA do odbiorcy
+			targetStream.Write(buf[:n])
+
+			// 4. Odbierz MEOW_OK od odbiorcy
+			respBuf := make([]byte, 4096)
+			m, err := targetStream.Read(respBuf)
+			if err != nil {
+				sendError(stream, "ERR_10", "Receiver did not respond")
+				continue
+			}
+
+			// 5. Przekaż MEOW_OK z powrotem do nadawcy
+			stream.Write(respBuf[:m])
 
 		case "BYE":
 			// Celowe zakończenie sesji [cite: 72]
