@@ -8,6 +8,8 @@ import (
 
 // SessionManager manages all active sessions in memory.
 // It periodically scans for idle sessions and closes them.
+// This component is purely transport-level and does not contain
+// any application-layer chat logic.
 type SessionManager struct {
 	sessions map[string]*Session
 	mu       sync.RWMutex
@@ -37,6 +39,7 @@ func (sm *SessionManager) Get(user string) (*Session, bool) {
 	return s, ok
 }
 
+// Remove deletes a session from the manager.
 func (sm *SessionManager) Remove(user string) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
@@ -45,7 +48,7 @@ func (sm *SessionManager) Remove(user string) {
 }
 
 // startCleaner periodically checks for sessions idle for more than 60 seconds
-// and closes them.
+// and closes them. This ensures resource cleanup and prevents stale sessions.
 func (sm *SessionManager) startCleaner() {
 	ticker := time.NewTicker(10 * time.Second)
 	for range ticker.C {

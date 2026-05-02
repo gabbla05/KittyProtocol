@@ -1,4 +1,4 @@
-// w hub/main.go
+// hub/main.go
 package main
 
 import (
@@ -38,14 +38,14 @@ func main() {
 
 	fmt.Println("🐈 KittyProtocol Hub listening on 127.0.0.1:9999")
 
-	// Obsługa SIGINT/SIGTERM – delikatne zamknięcie listenera.
+	// Signal handling (SIGINT, SIGTERM, SIGQUIT) – graceful listener shutdown.
 	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
 
 	go func() {
 		sig := <-sigCh
 		fmt.Println("\n[Hub] Caught signal:", sig)
-		// Zamykamy listener – Accept zacznie zwracać błędy.
+		// Close listener – Accept will start returning errors.
 		listener.Close()
 	}()
 
@@ -53,7 +53,7 @@ func main() {
 		conn, err := listener.Accept(context.Background())
 		if err != nil {
 			fmt.Println("Accept error:", err)
-			// Po zamknięciu listenera przez sygnał – kończymy main.
+			// After listener is closed by signal – exit main.
 			return
 		}
 		go handleClient(conn)

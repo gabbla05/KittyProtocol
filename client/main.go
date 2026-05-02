@@ -29,22 +29,22 @@ func main() {
 	var stream *quic.Stream
 	var err error
 
-	// Kanał na sygnały systemowe (SIGINT, SIGTERM)
+	// Channel for OS signals (SIGINT, SIGTERM, SIGQUIT).
 	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
 
-	// Osobna gorutyna do obsługi sygnałów – delikatne zamknięcie klienta.
+	// Separate goroutine for signal handling – graceful client shutdown.
 	go func() {
 		sig := <-sigCh
 		fmt.Println("\n[System] Caught signal:", sig)
 
-		// Jeśli mamy aktywny stream, spróbujmy wysłać BYE.
+		// If we have an active stream, try to send BYE.
 		if stream != nil {
 			sendBye(stream)
 			stream.Close()
 		}
-		// Conn nie musi być zamykany CloseWithError – idle timeout po stronie Huba
-		// i tak go posprząta. Tutaj po prostu kończymy proces.
+		// Connection does not need CloseWithError – Hub's idle timeout
+		// will clean it up anyway. We simply exit the process.
 		fmt.Println("[System] Closing session due to signal.")
 		os.Exit(0)
 	}()
@@ -86,7 +86,7 @@ func main() {
 			sendAuth(stream, user, pass)
 			success, errCode := waitForAuthOK(stream)
 			if success {
-				// Po poprawnym AUTH przechodzimy do wyboru adresata
+				// After successful AUTH we move to target selection.
 				state = StateSelectingTarget
 			} else {
 				fmt.Printf("[System] Auth failed with code: %s. Reconnecting...\n", errCode)
@@ -96,10 +96,10 @@ func main() {
 		case StateSelectingTarget:
 			fmt.Println("[System] Session established.")
 
-			// 1) Najpierw wybieramy adresata
+			// 1) First, select the recipient.
 			var target string
 			for {
-				target = readTarget(reader) // użyjemy Twojej funkcji z input.go
+				target = readTarget(reader)
 				target = strings.TrimSpace(target)
 
 				if len(target) == 0 {
@@ -110,15 +110,15 @@ func main() {
 				break
 			}
 
-			// 2) Dopiero teraz startujemy ping + odbiornik
+			// 2) Only now start ping loop + receiver loop.
 			disconnected := make(chan struct{})
 			startPingLoop(stream)
 			pending, mu := startReceiverLoop(stream, disconnected)
 
-			// Po wybraniu targetu jesteśmy w pełni „Established”
+			// After selecting the target we are fully "Established".
 			state = StateEstablished
 
-			// 3) Główna pętla wysyłania
+			// 3) Main sending loop.
 			for {
 				select {
 				case <-disconnected:
@@ -132,7 +132,7 @@ func main() {
 				text, err := reader.ReadString('\n')
 				if err != nil {
 					if err == io.EOF {
-						// Ctrl+D – traktujemy jak /quit
+						// Ctrl+D – treat as /quit.
 						fmt.Println("\n[System] EOF detected (Ctrl+D). Sending BYE and exiting.")
 						if stream != nil {
 							sendBye(stream)
@@ -150,10 +150,10 @@ func main() {
 				text = strings.TrimSpace(text)
 
 				if text == "/quit" {
-					// Łagodne zakończenie: BYE + zamknięcie strumienia.
+					// Graceful termination: BYE + stream close.
 					sendBye(stream)
 					stream.Close()
-					// NIE używamy CloseWithError – nie chcemy Application error po stronie Huba.
+					// We do NOT use CloseWithError – we do not want an application error on the Hub side.
 					time.Sleep(200 * time.Millisecond)
 					fmt.Println("[System] Closing session by user request.")
 					state = StateDisconnected

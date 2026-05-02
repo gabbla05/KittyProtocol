@@ -9,10 +9,13 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
+// routeData forwards a DATA frame from the sender to the target session.
+// It performs only protocol-level checks (session existence, stream availability),
+// without imposing any application-level "chat state" semantics.
 func routeData(frame protocol.DataFrame, sender *protection.Session, senderStream *quic.Stream) bool {
 	targetSess, ok := globalSessions.Get(frame.Target)
 	if !ok {
-		// Odbiorca nie ma aktywnej sesji
+		// Receiver has no active session.
 		sendError(senderStream, "ERR_15", "Receiver offline")
 		return false
 	}
@@ -22,12 +25,8 @@ func routeData(frame protocol.DataFrame, sender *protection.Session, senderStrea
 		return false
 	}
 
-	// NOWE: odbiorca jest zalogowany, ale jeszcze nie „ wszedł w rozmowę”
-	// (np. nie wybrał targetu / nie wysłał żadnego DATA).
-	if !targetSess.ReadyForChat {
-		sendError(senderStream, "ERR_16", "Receiver not ready for chat")
-		return false
-	}
+	// Pure routing: Hub does not enforce whether the receiver "accepted" the chat.
+	// That logic belongs to the application layer (e.g. Meowssenger).
 
 	forward := protocol.DataFrame{
 		BaseFrame: protocol.BaseFrame{

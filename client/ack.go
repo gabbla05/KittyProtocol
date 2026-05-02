@@ -15,7 +15,7 @@ import (
 var pendingMessages []protocol.DataFrame
 var clientState *ClientState
 
-// startReceiverLoop słucha przychodzących ramek i obsługuje MEOW_OK oraz ERROR.
+// startReceiverLoop listens for incoming frames and handles MEOW_OK, ERROR and DATA.
 func startReceiverLoop(stream *quic.Stream, disconnected chan struct{}) (map[int64]chan struct{}, *sync.Mutex) {
 
 	pending := make(map[int64]chan struct{})
@@ -28,7 +28,7 @@ func startReceiverLoop(stream *quic.Stream, disconnected chan struct{}) (map[int
 			if err != nil {
 				fmt.Println("\n[Client] Connection closed by server:", err)
 				fmt.Println("[System] Returning to disconnected state.")
-				// sygnalizujemy mainowi, że sesja się skończyła
+				// Signal to main that the session has ended.
 				select {
 				case <-disconnected:
 				default:
@@ -37,7 +37,7 @@ func startReceiverLoop(stream *quic.Stream, disconnected chan struct{}) (map[int
 				return
 			}
 
-			// TASK 8: Wstępne rozpoznanie typu ramki [cite: 2185]
+			// TASK 8: Lightweight detection of frame type.
 			typeName, msgID, err := protocol.GetFrameType(buf[:n])
 			if err != nil {
 				fmt.Println("[Client] Parse error:", err)
@@ -61,11 +61,8 @@ func startReceiverLoop(stream *quic.Stream, disconnected chan struct{}) (map[int
 
 					switch errFrame.Code {
 					case "ERR_15":
-						// Odbiorca offline – NIE zamykamy sesji, tylko informujemy użytkownika.
+						// Receiver is offline – we do NOT close the session, only inform the user.
 						fmt.Println("[System] Receiver is offline. Messages will not be delivered.")
-					case "ERR_16":
-						// Odbiorca zalogowany, ale nie „ wszedł w rozmowę”.
-						fmt.Println("[System] Receiver has not accepted the conversation yet.")
 					}
 
 					fmt.Print("> ")
@@ -76,7 +73,7 @@ func startReceiverLoop(stream *quic.Stream, disconnected chan struct{}) (map[int
 			case "DATA":
 				var df protocol.DataFrame
 				if json.Unmarshal(buf[:n], &df) == nil {
-					// Minimalny „chat” – nadawca + treść
+					// Minimal chat output – sender + payload.
 					fmt.Printf("\n[Message from %s]: %s\n> ", df.Sender, df.Payload)
 				} else {
 					fmt.Println("\n[Client] Failed to parse DATA frame\n> ")
@@ -88,17 +85,17 @@ func startReceiverLoop(stream *quic.Stream, disconnected chan struct{}) (map[int
 	return pending, &mu
 }
 
-// sendMessage wysyła ramkę DATA i uruchamia 5-sekundowy timer ACK.
+// sendMessage sends a DATA frame and starts a 5-second ACK timer.
 func sendMessage(stream *quic.Stream, target, text string, pending map[int64]chan struct{}, mu *sync.Mutex) {
 	safe := clientutils.TruncateMessage(text)
-	msgID := time.Now().UnixMilli() // msg_id jako timestamp [cite: 2146]
+	msgID := time.Now().UnixMilli() // msg_id as timestamp
 
 	ch := make(chan struct{})
 	mu.Lock()
 	pending[msgID] = ch
 	mu.Unlock()
 
-	// Timer obsługujący brak potwierdzenia (Task 14) [cite: 2267, 3283]
+	// Timer handling missing acknowledgments (Task 14).
 	clientutils.StartAckTimer(msgID, ch, func() {
 		mu.Lock()
 		if _, ok := pending[msgID]; ok {
@@ -108,7 +105,7 @@ func sendMessage(stream *quic.Stream, target, text string, pending map[int64]cha
 		mu.Unlock()
 	})
 
-	// TASK 10: Utworzenie twardej struktury DataFrame [cite: 2153, 2731]
+	// TASK 10: Create a strongly typed DataFrame.
 	frame := protocol.DataFrame{
 		BaseFrame: protocol.BaseFrame{
 			Type:  "DATA",
