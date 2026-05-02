@@ -1,8 +1,12 @@
+// w hub/main.go
 package main
 
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/gabbla05/KittyProtocol/internal/certmanager"
@@ -15,18 +19,11 @@ var globalSessions = protection.NewSessionManager()
 
 // main starts the KittyProtocol Hub and listens for incoming QUIC connections.
 func main() {
-
-	// TLS 1.3 + ALPN kitty-quic-v1
-	// ALPN = Application-Layer Protocol Negotiation
-	// It is TLS mechanism that enables client and server to settle:
-	// „Which application protocol will work inside TLS tunnel?”
-
 	tlsConf, err := certmanager.SetupTLSConfig("certs/cert.pem", "certs/key.pem")
 	if err != nil {
 		panic(err)
 	}
 
-	// QUIC config consistent with documentation
 	quicConf := &quic.Config{
 		MaxIdleTimeout:          60 * time.Second,
 		KeepAlivePeriod:         30 * time.Second,
@@ -41,11 +38,23 @@ func main() {
 
 	fmt.Println("🐈 KittyProtocol Hub listening on 127.0.0.1:9999")
 
+	// Obsługa SIGINT/SIGTERM – delikatne zamknięcie listenera.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		sig := <-sigCh
+		fmt.Println("\n[Hub] Caught signal:", sig)
+		// Zamykamy listener – Accept zacznie zwracać błędy.
+		listener.Close()
+	}()
+
 	for {
 		conn, err := listener.Accept(context.Background())
 		if err != nil {
 			fmt.Println("Accept error:", err)
-			continue
+			// Po zamknięciu listenera przez sygnał – kończymy main.
+			return
 		}
 		go handleClient(conn)
 	}

@@ -1,7 +1,8 @@
+// client/ack.go
 package main
 
 import (
-	"encoding/json" // Dodano do obsługi JSON
+	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -11,8 +12,12 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
+var pendingMessages []protocol.DataFrame
+var clientState *ClientState
+
 // startReceiverLoop słucha przychodzących ramek i obsługuje MEOW_OK oraz ERROR.
-func startReceiverLoop(stream *quic.Stream) (map[int64]chan struct{}, *sync.Mutex) {
+func startReceiverLoop(stream *quic.Stream, disconnected chan struct{}) (map[int64]chan struct{}, *sync.Mutex) {
+
 	pending := make(map[int64]chan struct{})
 	var mu sync.Mutex
 
@@ -23,6 +28,12 @@ func startReceiverLoop(stream *quic.Stream) (map[int64]chan struct{}, *sync.Mute
 			if err != nil {
 				fmt.Println("\n[Client] Connection closed by server:", err)
 				fmt.Println("[System] Returning to disconnected state.")
+				// sygnalizujemy mainowi, że sesja się skończyła
+				select {
+				case <-disconnected:
+				default:
+					close(disconnected)
+				}
 				return
 			}
 
@@ -44,10 +55,31 @@ func startReceiverLoop(stream *quic.Stream) (map[int64]chan struct{}, *sync.Mute
 				mu.Unlock()
 
 			case "ERROR":
-				// TASK 10: Parsowanie do dedykowanej struktury ErrorFrame [cite: 2151, 2396]
 				var errFrame protocol.ErrorFrame
 				if json.Unmarshal(buf[:n], &errFrame) == nil {
-					fmt.Printf("\n[Server ERROR] %s: %s\n> ", errFrame.Code, errFrame.Desc)
+					fmt.Printf("\n[Server ERROR] %s: %s\n", errFrame.Code, errFrame.Desc)
+
+					switch errFrame.Code {
+					case "ERR_15":
+						// Odbiorca offline – NIE zamykamy sesji, tylko informujemy użytkownika.
+						fmt.Println("[System] Receiver is offline. Messages will not be delivered.")
+					case "ERR_16":
+						// Odbiorca zalogowany, ale nie „ wszedł w rozmowę”.
+						fmt.Println("[System] Receiver has not accepted the conversation yet.")
+					}
+
+					fmt.Print("> ")
+				} else {
+					fmt.Println("\n[Client: ack] Failed to parse ERROR frame\n> ")
+				}
+
+			case "DATA":
+				var df protocol.DataFrame
+				if json.Unmarshal(buf[:n], &df) == nil {
+					// Minimalny „chat” – nadawca + treść
+					fmt.Printf("\n[Message from %s]: %s\n> ", df.Sender, df.Payload)
+				} else {
+					fmt.Println("\n[Client] Failed to parse DATA frame\n> ")
 				}
 			}
 		}

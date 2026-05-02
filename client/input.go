@@ -19,5 +19,5 @@ func readCredentials(r *bufio.Reader) (string, string) {
 func readTarget(r *bufio.Reader) string {
 	fmt.Print("Do kogo piszesz?: ")
 	target, _ := r.ReadString('\n')
-	return target[:len(target)-1]
+	return strings.TrimSpace(target)
 }

@@ -37,6 +37,13 @@ func (sm *SessionManager) Get(user string) (*Session, bool) {
 	return s, ok
 }
 
+func (sm *SessionManager) Remove(user string) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	fmt.Println("[SessionManager] Removing session for:", user)
+	delete(sm.sessions, user)
+}
+
 // startCleaner periodically checks for sessions idle for more than 60 seconds
 // and closes them.
 func (sm *SessionManager) startCleaner() {

@@ -10,10 +10,11 @@ import (
 type ClientState int
 
 const (
-	StateDisconnected   ClientState = iota
-	StateHandshaking                // Po wysłaniu HELLO [cite: 4258]
-	StateAuthenticating             // Po wysłaniu AUTH [cite: 4263]
-	StateEstablished                // Gotowy do wymiany DATA [cite: 4274]
+	StateDisconnected    ClientState = iota
+	StateHandshaking                 // Po wysłaniu HELLO [cite: 4258]
+	StateAuthenticating              // Po wysłaniu AUTH [cite: 4263]
+	StateSelectingTarget             // Potrzebny do blokowania napływu wiadomości aż do wybory adresata
+	StateEstablished                 // Gotowy do wymiany DATA [cite: 4274]
 )
 
 type KittyClient struct {
