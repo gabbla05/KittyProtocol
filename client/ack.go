@@ -12,9 +12,6 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
-var pendingMessages []protocol.DataFrame
-var clientState *ClientState
-
 // startReceiverLoop listens for incoming frames and handles MEOW_OK, ERROR and DATA.
 func startReceiverLoop(stream *quic.Stream, disconnected chan struct{}) (map[int64]chan struct{}, *sync.Mutex) {
 
