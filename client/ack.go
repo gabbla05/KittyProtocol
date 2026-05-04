@@ -19,6 +19,9 @@ func startReceiverLoop(stream *quic.Stream, disconnected chan struct{}) (map[int
 	pending := make(map[int64]chan struct{})
 	var mu sync.Mutex
 
+	// Client-side replay protection (silent drop of duplicate msg_id).
+	replayDetector := NewReplayDetector()
+
 	go func() {
 		buf := make([]byte, 4096)
 		for {
@@ -72,7 +75,14 @@ func startReceiverLoop(stream *quic.Stream, disconnected chan struct{}) (map[int
 				var df protocol.DataFrame
 				if json.Unmarshal(buf[:n], &df) == nil {
 
-					// --- E2EE DECRYPTION HERE ---
+					// --- Client-side replay protection (silent drop) ---
+					if replayDetector.MarkAndCheck(df.MsgID) {
+						// Duplicate msg_id – ignore silently (malicious or buggy Hub).
+						continue
+					}
+					// --------------------------------------------------
+
+					// --- E2EE DECRYPTION ---
 					plaintext, err := cryptoee.DecryptAndVerify(
 						df.MsgID,
 						df.Target,
@@ -83,7 +93,7 @@ func startReceiverLoop(stream *quic.Stream, disconnected chan struct{}) (map[int
 						fmt.Printf("\n[Client] E2EE error: %v\n> ", err)
 						continue
 					}
-					// ----------------------------
+					// -----------------------
 
 					// Minimal chat output – sender + decrypted payload.
 					fmt.Printf("\n[Message from %s]: %s\n> ", df.Sender, plaintext)
@@ -118,14 +128,12 @@ func sendMessage(stream *quic.Stream, target, text string, pending map[int64]cha
 		mu.Unlock()
 	})
 
-	// ==================================
-	// --- E2EE ENCRYPTION ADDED HERE ---
+	// E2EE encryption.
 	payloadB64, macB64, err := cryptoee.EncryptAndMAC(msgID, target, safe)
 	if err != nil {
 		fmt.Println("[Client] E2EE encryption error:", err)
 		return
 	}
-	// ==================================
 
 	// TASK 10: Create a strongly typed DataFrame.
 	frame := protocol.DataFrame{

@@ -140,6 +140,13 @@ func handleClient(conn *quic.Conn) {
 				continue
 			}
 
+			// --- ERR_06: Replay protection ---
+			if session.Replay != nil && session.Replay.MarkAndCheck(frame.MsgID) {
+				sendError(stream, "ERR_06", "Replay detected")
+				continue
+			}
+			// -----------------------------------------
+
 			// Sender is active; Hub does not track any "chat readiness" state.
 			session.LastActive = time.Now()
 

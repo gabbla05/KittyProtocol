@@ -15,6 +15,7 @@ type Session struct {
 	CloseFunc  func()
 	Conn       *quic.Conn
 	Stream     *quic.Stream
+	Replay     *ReplayDetector
 }
 
 // NewSession creates a new Session for the given user and connection.
@@ -28,5 +29,6 @@ func NewSession(user string, conn *quic.Conn, stream *quic.Stream) *Session {
 		},
 		Conn:   conn,
 		Stream: stream,
+		Replay: NewReplayDetector(),
 	}
 }
