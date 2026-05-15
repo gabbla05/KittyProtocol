@@ -11,9 +11,9 @@ const MaxPlaintextSize = 1500
 // TruncateMessage trims the input string so that it does not exceed MaxPlaintextSize.
 // This is a temporary approximation until AEAD encryption is implemented.
 func TruncateMessage(input string) string {
-    if len(input) > MaxPlaintextSize {
-        fmt.Printf("[System] Message too long (%d bytes). Truncating to %d bytes...\n", len(input), MaxPlaintextSize)
-        return input[:MaxPlaintextSize]
-    }
-    return input
+	if len(input) > MaxPlaintextSize {
+		fmt.Printf("[System] Message too long (%d bytes). Truncating to %d bytes...\n", len(input), MaxPlaintextSize)
+		return input[:MaxPlaintextSize]
+	}
+	return input
 }

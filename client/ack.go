@@ -1,31 +1,44 @@
+// client/ack.go
 package main
 
 import (
-	"encoding/json" // Dodano do obsługi JSON
+	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/gabbla05/KittyProtocol/internal/clientutils"
+	"github.com/gabbla05/KittyProtocol/internal/cryptoee"
 	"github.com/gabbla05/KittyProtocol/protocol"
 	"github.com/quic-go/quic-go"
 )
 
-// startReceiverLoop słucha przychodzących ramek i obsługuje MEOW_OK oraz ERROR.
-func startReceiverLoop(stream *quic.Stream) (map[int64]chan struct{}, *sync.Mutex) {
+// startReceiverLoop listens for incoming frames and handles MEOW_OK, ERROR and DATA.
+func startReceiverLoop(stream *quic.Stream, disconnected chan struct{}) (map[int64]chan struct{}, *sync.Mutex) {
+
 	pending := make(map[int64]chan struct{})
 	var mu sync.Mutex
+
+	// Client-side replay protection (silent drop of duplicate msg_id).
+	replayDetector := NewReplayDetector()
 
 	go func() {
 		buf := make([]byte, 4096)
 		for {
 			n, err := stream.Read(buf)
 			if err != nil {
-				fmt.Println("\n[Client] Connection closed:", err)
+				fmt.Println("\n[Client] Connection closed by server:", err)
+				fmt.Println("[System] Returning to disconnected state.")
+				// Signal to main that the session has ended.
+				select {
+				case <-disconnected:
+				default:
+					close(disconnected)
+				}
 				return
 			}
 
-			// TASK 8: Wstępne rozpoznanie typu ramki [cite: 2185]
+			// TASK 8: Lightweight detection of frame type.
 			typeName, msgID, err := protocol.GetFrameType(buf[:n])
 			if err != nil {
 				fmt.Println("[Client] Parse error:", err)
@@ -43,10 +56,50 @@ func startReceiverLoop(stream *quic.Stream) (map[int64]chan struct{}, *sync.Mute
 				mu.Unlock()
 
 			case "ERROR":
-				// TASK 10: Parsowanie do dedykowanej struktury ErrorFrame [cite: 2151, 2396]
 				var errFrame protocol.ErrorFrame
 				if json.Unmarshal(buf[:n], &errFrame) == nil {
-					fmt.Printf("\n[Server ERROR] %s: %s\n> ", errFrame.Code, errFrame.Desc)
+					fmt.Printf("\n[Server ERROR] %s: %s\n", errFrame.Code, errFrame.Desc)
+
+					switch errFrame.Code {
+					case "ERR_15":
+						// Receiver is offline – we do NOT close the session, only inform the user.
+						fmt.Println("[System] Receiver is offline. Messages will not be delivered.")
+					}
+
+					fmt.Print("> ")
+				} else {
+					fmt.Println("\n[Client: ack] Failed to parse ERROR frame\n> ")
+				}
+
+			case "DATA":
+				var df protocol.DataFrame
+				if json.Unmarshal(buf[:n], &df) == nil {
+
+					// --- Client-side replay protection (silent drop) ---
+					if replayDetector.MarkAndCheck(df.MsgID) {
+						// Duplicate msg_id – ignore silently (malicious or buggy Hub).
+						continue
+					}
+					// --------------------------------------------------
+
+					// --- E2EE DECRYPTION ---
+					plaintext, err := cryptoee.DecryptAndVerify(
+						df.MsgID,
+						df.Target,
+						df.Payload,
+						df.MAC,
+					)
+					if err != nil {
+						fmt.Printf("\n[Client] E2EE error: %v\n> ", err)
+						continue
+					}
+					// -----------------------
+
+					// Minimal chat output – sender + decrypted payload.
+					fmt.Printf("\n[Message from %s]: %s\n> ", df.Sender, plaintext)
+
+				} else {
+					fmt.Println("\n[Client] Failed to parse DATA frame\n> ")
 				}
 			}
 		}
@@ -55,17 +108,17 @@ func startReceiverLoop(stream *quic.Stream) (map[int64]chan struct{}, *sync.Mute
 	return pending, &mu
 }
 
-// sendMessage wysyła ramkę DATA i uruchamia 5-sekundowy timer ACK.
+// sendMessage sends a DATA frame and starts a 5-second ACK timer.
 func sendMessage(stream *quic.Stream, target, text string, pending map[int64]chan struct{}, mu *sync.Mutex) {
 	safe := clientutils.TruncateMessage(text)
-	msgID := time.Now().UnixMilli() // msg_id jako timestamp [cite: 2146]
+	msgID := time.Now().UnixMilli() // msg_id as timestamp
 
 	ch := make(chan struct{})
 	mu.Lock()
 	pending[msgID] = ch
 	mu.Unlock()
 
-	// Timer obsługujący brak potwierdzenia (Task 14) [cite: 2267, 3283]
+	// Timer handling missing acknowledgments (Task 14).
 	clientutils.StartAckTimer(msgID, ch, func() {
 		mu.Lock()
 		if _, ok := pending[msgID]; ok {
@@ -75,15 +128,22 @@ func sendMessage(stream *quic.Stream, target, text string, pending map[int64]cha
 		mu.Unlock()
 	})
 
-	// TASK 10: Utworzenie twardej struktury DataFrame [cite: 2153, 2731]
+	// E2EE encryption.
+	payloadB64, macB64, err := cryptoee.EncryptAndMAC(msgID, target, safe)
+	if err != nil {
+		fmt.Println("[Client] E2EE encryption error:", err)
+		return
+	}
+
+	// TASK 10: Create a strongly typed DataFrame.
 	frame := protocol.DataFrame{
 		BaseFrame: protocol.BaseFrame{
 			Type:  "DATA",
 			MsgID: msgID,
 		},
 		Target:  target,
-		Payload: safe,
-		MAC:     "placeholder",
+		Payload: payloadB64, // encrypted
+		MAC:     macB64,     // HMAC
 	}
 
 	b, _ := json.Marshal(frame)

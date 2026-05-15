@@ -20,7 +20,7 @@ func main() {
 
 	tlsConf := &tls.Config{
 		Certificates: []tls.Certificate{cert},
-		NextProtos:   []string{"kitty-quic"},
+		NextProtos:   []string{"kitty-quic-v1"},
 	}
 
 	// Słuchamy na 9999

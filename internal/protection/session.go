@@ -14,10 +14,12 @@ type Session struct {
 	Limiter    *RateLimiter
 	CloseFunc  func()
 	Conn       *quic.Conn
+	Stream     *quic.Stream
+	Replay     *ReplayDetector
 }
 
 // NewSession creates a new Session for the given user and connection.
-func NewSession(user string, conn *quic.Conn) *Session {
+func NewSession(user string, conn *quic.Conn, stream *quic.Stream) *Session {
 	return &Session{
 		ID:         user,
 		LastActive: time.Now(),
@@ -25,6 +27,8 @@ func NewSession(user string, conn *quic.Conn) *Session {
 		CloseFunc: func() {
 			conn.CloseWithError(0x09, "Idle Timeout")
 		},
-		Conn: conn,
+		Conn:   conn,
+		Stream: stream,
+		Replay: NewReplayDetector(),
 	}
 }

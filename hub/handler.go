@@ -1,8 +1,9 @@
+// hub/handler.go
 package main
 
 import (
 	"context"
-	"encoding/json" // Dodano dla json.Marshal
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -12,6 +13,9 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
+// handleClient handles a single QUIC connection (one logical client).
+// It reads JSON frames from the stream, performs initial type validation,
+// and delegates logic to the appropriate modules (auth_flow, router, protection).
 func handleClient(conn *quic.Conn) {
 	stream, err := conn.AcceptStream(context.Background())
 	if err != nil {
@@ -22,6 +26,18 @@ func handleClient(conn *quic.Conn) {
 
 	var authTimer *protection.AuthTimer
 	var session *protection.Session
+	var username string
+
+	// Global session cleanup when the handler finishes.
+	defer func() {
+		if session != nil {
+			fmt.Println("[Handler] Cleaning up session for:", username)
+			globalSessions.Remove(username)
+			if session.CloseFunc != nil {
+				session.CloseFunc()
+			}
+		}
+	}()
 
 	buf := make([]byte, 4096)
 
@@ -32,14 +48,20 @@ func handleClient(conn *quic.Conn) {
 			return
 		}
 
-		// TASK 8: Wstępna walidacja typu i obecności pól bazowych (type, msg_id)
+		fmt.Println("[RAW]", string(buf[:n]))
+		fmt.Println("[Hub] STREAM ID:", stream.StreamID())
+		fmt.Println("[Hub] RAW:", string(buf[:n]))
+
+		// TASK 8: Initial validation of frame type and presence of base fields (type, msg_id).
 		typeName, _, perr := protocol.GetFrameType(buf[:n])
 		if perr != nil {
 			sendError(stream, "ERR_02", perr.Error())
 			continue
 		}
 
-		// TASK 8: Sprawdzenie czy typ ramki jest znany protokołowi
+		fmt.Println("[Handler] Received frame type:", typeName) // temporary debug log
+
+		// TASK 8: Check if the frame type is known to the protocol.
 		if !protocol.IsValidType(typeName) {
 			sendError(stream, "ERR_02", "Unknown frame type: "+typeName)
 			continue
@@ -48,28 +70,34 @@ func handleClient(conn *quic.Conn) {
 		switch typeName {
 
 		case "HELLO":
+			// HELLO → MEOW_OK("Ready for auth") + start AUTH timer (Task 9).
 			authTimer = handleHELLO(stream, conn)
 
 		case "AUTH":
-			// TASK 8: Rygorystyczny parser sprawdzający obecność user i pass
+			// TASK 8: Strict parser validating presence of user and pass.
 			frame, err := protocol.ParseAuthFrame(buf[:n])
 			if err != nil {
 				sendError(stream, "ERR_02", err.Error())
 				continue
 			}
 
+			// Stop AUTH timer (Task 9).
 			if authTimer != nil {
 				authTimer.Stop()
 			}
+
+			// Credentials verification (Task 6).
 			if !auth.CheckCredentials(frame.User, frame.Pass) {
 				sendError(stream, "ERR_04", "Authentication failed")
 				return
 			}
 
-			session = protection.NewSession(frame.User, conn)
+			// Create session and register it in globalSessions (Task 9, Task 5).
+			session = protection.NewSession(frame.User, conn, stream)
 			globalSessions.Add(frame.User, session)
+			username = frame.User
 
-			// TASK 10: Wysłanie dedykowanej ramki MeowOkFrame [cite: 133]
+			// TASK 10: Send dedicated MeowOkFrame.
 			ok := protocol.MeowOkFrame{
 				BaseFrame: protocol.BaseFrame{
 					Type:  "MEOW_OK",
@@ -77,32 +105,58 @@ func handleClient(conn *quic.Conn) {
 				},
 				Status: "Logged in",
 			}
-			b, _ := json.Marshal(ok)
-			stream.Write(b)
+			if b, err := json.Marshal(ok); err == nil {
+				stream.Write(b)
+			}
 
 		case "PING":
+			// Update session activity (Idle Timeout – Task 9).
 			if session != nil {
 				session.LastActive = time.Now()
 			}
 
 		case "DATA":
-			// TASK 8: Rygorystyczny parser sprawdzający payload i MAC [cite: 81, 117]
+			// TASK 8: Strict parser validating payload and MAC.
 			frame, err := protocol.ParseDataFrame(buf[:n])
 			if err != nil {
 				sendError(stream, "ERR_02", err.Error())
 				continue
 			}
 
-			if session == nil {
-				sendError(stream, "ERR_01", "DATA before AUTH") // [cite: 278]
-				continue
-			}
-			if !session.Limiter.Allow() {
-				sendError(stream, "ERR_07", "Rate limit exceeded") // [cite: 278]
+			// Check if target is not empty.
+			if frame.Target == "" {
+				sendError(stream, "ERR_02", "Missing target")
 				continue
 			}
 
-			// Aplikacyjne potwierdzenie (ACK) - [cite: 48, 55]
+			if session == nil {
+				sendError(stream, "ERR_01", "DATA before AUTH")
+				continue
+			}
+
+			// Per-user rate limiting (Task 9).
+			if !session.Limiter.Allow() {
+				sendError(stream, "ERR_07", "Rate limit exceeded")
+				continue
+			}
+
+			// --- ERR_06: Replay protection ---
+			if session.Replay != nil && session.Replay.MarkAndCheck(frame.MsgID) {
+				sendError(stream, "ERR_06", "Replay detected")
+				continue
+			}
+			// -----------------------------------------
+
+			// Sender is active; Hub does not track any "chat readiness" state.
+			session.LastActive = time.Now()
+
+			ok := routeData(*frame, session, stream)
+			if !ok {
+				// routeData already sent ERR_10 / ERR_15 – nothing more to do here.
+				continue
+			}
+
+			// ACK for sender (application-level delivery confirmation – Task 14 / MB contract).
 			ack := protocol.MeowOkFrame{
 				BaseFrame: protocol.BaseFrame{
 					Type:  "MEOW_OK",
@@ -110,11 +164,20 @@ func handleClient(conn *quic.Conn) {
 				},
 				Status: "Delivered (mock)",
 			}
-			b, _ := json.Marshal(ack)
-			stream.Write(b)
+			if b, err := json.Marshal(ack); err == nil {
+				stream.Write(b)
+			}
 
 		case "BYE":
-			// Celowe zakończenie sesji [cite: 72]
+			// Client intentionally ends the session – we do not shut down the whole Hub,
+			// only clean up its entry in the SessionManager.
+			if session != nil {
+				fmt.Println("[Handler] Cleaning up session for:", username)
+				globalSessions.Remove(username)
+				if session.CloseFunc != nil {
+					session.CloseFunc()
+				}
+			}
 			return
 		}
 	}
