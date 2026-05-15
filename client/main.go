@@ -190,6 +190,16 @@ func main() {
 					return
 				}
 
+				if after, ok := strings.CutPrefix(text, "/status "); ok {
+					targetUser := strings.TrimSpace(after)
+					if targetUser == "" {
+						fmt.Println("[System] Usage: /status <username>")
+						continue
+					}
+					sendGetStatus(stream, targetUser)
+					continue
+				}
+
 				// Production message sending:
 				//   - generates msg_id (timestamp),
 				//   - performs E2EE (AEAD + HMAC) in cryptoee,

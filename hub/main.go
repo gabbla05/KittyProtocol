@@ -31,12 +31,12 @@ func main() {
 		DisablePathMTUDiscovery: false,
 	}
 
-	listener, err := quic.ListenAddr("127.0.0.1:9999", tlsConf, quicConf)
+	listener, err := quic.ListenAddr("0.0.0.0:9999", tlsConf, quicConf)
 	if err != nil {
 		panic(err)
 	}
 
-	fmt.Println("🐈 KittyProtocol Hub listening on 127.0.0.1:9999")
+	fmt.Println("🐈 KittyProtocol Hub listening on 0.0.0.0:9999")
 
 	// Signal handling (SIGINT, SIGTERM, SIGQUIT) – graceful listener shutdown.
 	sigCh := make(chan os.Signal, 1)

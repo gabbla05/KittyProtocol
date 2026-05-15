@@ -168,6 +168,44 @@ func handleClient(conn *quic.Conn) {
 				stream.Write(b)
 			}
 
+		case "STATUS_RES":
+
+		case "GET_STATUS":
+			// Parsujemy ramkę GET_STATUS
+			frame, err := protocol.ParseGetStatusFrame(buf[:n])
+			if err != nil {
+				sendError(stream, "ERR_02", err.Error())
+				continue
+			}
+
+			// Sprawdzamy, czy użytkownik jest online
+			online := globalSessions.IsOnline(frame.Target)
+
+			status := "offline"
+			if online {
+				status = "online"
+			}
+
+			res := protocol.StatusResFrame{
+				BaseFrame: protocol.BaseFrame{
+					Type:  "STATUS_RES",
+					MsgID: frame.MsgID, // echo msg_id z zapytania
+				},
+				Target: frame.Target,
+				Status: status,
+			}
+
+			b, err := json.Marshal(res)
+			if err != nil {
+				sendError(stream, "ERR_02", "Failed to marshal STATUS_RES")
+				continue
+			}
+
+			if _, err := stream.Write(b); err != nil {
+				fmt.Println("[Hub] Failed to send STATUS_RES:", err)
+				continue
+			}
+
 		case "BYE":
 			// Client intentionally ends the session – we do not shut down the whole Hub,
 			// only clean up its entry in the SessionManager.

@@ -88,3 +88,11 @@ func NewSessionManagerWithInterval(interval time.Duration, idle time.Duration) *
 	}()
 	return sm
 }
+
+func (sm *SessionManager) IsOnline(user string) bool {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+
+	_, ok := sm.sessions[user]
+	return ok
+}

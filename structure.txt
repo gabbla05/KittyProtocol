@@ -1,0 +1,66 @@
+.
+├── ./certs
+│   ├── ./certs/cert.pem
+│   └── ./certs/key.pem
+├── ./client
+│   ├── ./client/ack.go
+│   ├── ./client/bye.go
+│   ├── ./client/hello_auth.go
+│   ├── ./client/input.go
+│   ├── ./client/main.go
+│   ├── ./client/ping.go
+│   ├── ./client/replay.go
+│   ├── ./client/replay_test.go
+│   └── ./client/state.go
+├── ./cmd
+│   ├── ./cmd/hash
+│   │   └── ./cmd/hash/main.go
+│   └── ./cmd/mock_server
+│       └── ./cmd/mock_server/main.go
+├── ./developers_stuff.md
+├── ./docs
+│   ├── ./docs/protocol_schema.json
+│   └── ./docs/types.ts
+├── ./documentation
+│   ├── ./documentation/KittyProtocol-EN.pdf
+│   └── ./documentation/KittyProtocol.pdf
+├── ./go.mod
+├── ./go.sum
+├── ./hub
+│   ├── ./hub/auth_flow.go
+│   ├── ./hub/errors.go
+│   ├── ./hub/handler.go
+│   ├── ./hub/main.go
+│   └── ./hub/router.go
+├── ./internal
+│   ├── ./internal/auth
+│   │   └── ./internal/auth/auth.go
+│   ├── ./internal/certmanager
+│   │   ├── ./internal/certmanager/certmanager.go
+│   │   └── ./internal/certmanager/certmanager_test.go
+│   ├── ./internal/clientutils
+│   │   ├── ./internal/clientutils/ack_timer.go
+│   │   ├── ./internal/clientutils/truncate.go
+│   │   └── ./internal/clientutils/truncate_test.go
+│   ├── ./internal/cryptoee
+│   │   ├── ./internal/cryptoee/cryptoee_test.go
+│   │   ├── ./internal/cryptoee/decrypt.go
+│   │   ├── ./internal/cryptoee/encrypt.go
+│   │   └── ./internal/cryptoee/keys.go
+│   └── ./internal/protection
+│       ├── ./internal/protection/limiter.go
+│       ├── ./internal/protection/limiter_test.go
+│       ├── ./internal/protection/replay.go
+│       ├── ./internal/protection/replay_test.go
+│       ├── ./internal/protection/session.go
+│       ├── ./internal/protection/session_manager.go
+│       └── ./internal/protection/session_manager_test.go
+├── ./kitty_logo.png
+├── ./protocol
+│   ├── ./protocol/frames.go
+│   └── ./protocol/frames_test.go
+├── ./README.md
+├── ./README.pl.md
+└── ./structure.txt
+
+16 directories, 48 files

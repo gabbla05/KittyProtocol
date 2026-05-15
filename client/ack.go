@@ -101,6 +101,15 @@ func startReceiverLoop(stream *quic.Stream, disconnected chan struct{}) (map[int
 				} else {
 					fmt.Println("\n[Client] Failed to parse DATA frame\n> ")
 				}
+
+			case "STATUS_RES":
+				var sf protocol.StatusResFrame
+				if json.Unmarshal(buf[:n], &sf) == nil {
+					fmt.Printf("\n[Status] %s is %s\n> ", sf.Target, sf.Status)
+				} else {
+					fmt.Println("\n[Client] Failed to parse STATUS_RES frame\n> ")
+				}
+
 			}
 		}
 	}()
@@ -148,4 +157,26 @@ func sendMessage(stream *quic.Stream, target, text string, pending map[int64]cha
 
 	b, _ := json.Marshal(frame)
 	stream.Write(b)
+}
+
+func sendGetStatus(stream *quic.Stream, target string) {
+	msgID := time.Now().UnixMilli()
+
+	frame := protocol.GetStatusFrame{
+		BaseFrame: protocol.BaseFrame{
+			Type:  "GET_STATUS",
+			MsgID: msgID,
+		},
+		Target: target,
+	}
+
+	b, err := json.Marshal(frame)
+	if err != nil {
+		fmt.Println("[Client] Failed to marshal GET_STATUS:", err)
+		return
+	}
+
+	if _, err := stream.Write(b); err != nil {
+		fmt.Println("[Client] Failed to send GET_STATUS:", err)
+	}
 }
