@@ -1,1 +1,5 @@
 ./certs/*
+
+.env
+
+.structure.txt
