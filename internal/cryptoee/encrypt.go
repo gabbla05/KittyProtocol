@@ -12,6 +12,7 @@ import (
 
 // EncryptAndMAC encrypts plaintext using AEAD (AES-GCM) and computes HMAC.
 // Returns BASE64(nonce||ciphertext) and BASE64(mac).
+// The HMAC is computed over: cipher || msg_id || target.
 func EncryptAndMAC(msgID int64, target, plaintext string) (string, string, error) {
 	kEnc, kMac, err := DeriveKeys()
 	if err != nil {
@@ -31,7 +32,8 @@ func EncryptAndMAC(msgID int64, target, plaintext string) (string, string, error
 	nonceSize := aead.NonceSize()
 	nonce := make([]byte, nonceSize)
 
-	// Encode msg_id into last 8 bytes of nonce
+	// Encode msg_id into last 8 bytes of nonce.
+	// The remaining bytes are zeroed (since make() zero-initializes the slice).
 	binary.BigEndian.PutUint64(nonce[nonceSize-8:], uint64(msgID))
 
 	ciphertext := aead.Seal(nil, nonce, []byte(plaintext), nil)
@@ -49,12 +51,12 @@ func EncryptAndMAC(msgID int64, target, plaintext string) (string, string, error
 		nil
 }
 
-// buildMACInput = cipher || msg_id || target
+// buildMACInput = cipher || msg_id || target.
 func buildMACInput(cipher []byte, msgID int64, target string) []byte {
 	msg := make([]byte, 8)
 	binary.BigEndian.PutUint64(msg, uint64(msgID))
 
-	out := make([]byte, 0, len(cipher)+8+len(target))
+	out := make([]byte, 0, len(cipher)+len(msg)+len(target))
 	out = append(out, cipher...)
 	out = append(out, msg...)
 	out = append(out, []byte(target)...)
