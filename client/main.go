@@ -3,8 +3,9 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
-	"crypto/tls"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/quic-go/quic-go"
 )
 
@@ -25,11 +27,15 @@ import (
 //   - run the main send loop for plaintext input,
 //   - gracefully close the session (BYE + stream close) on exit.
 func main() {
+	// Load environment variables from .env file (if present)
+	_ = godotenv.Load()
+
 	// Minimal TLS configuration for development.
 	// In production: proper certificate verification, pinning, etc.
-	tlsConf := &tls.Config{
-		InsecureSkipVerify: true,
-		NextProtos:         []string{"kitty-quic-v1"},
+	tlsConf, err := buildTLSConfig()
+	if err != nil {
+		fmt.Println("TLS config error:", err)
+		return
 	}
 
 	reader := bufio.NewReader(os.Stdin)
@@ -37,7 +43,6 @@ func main() {
 
 	var conn *quic.Conn
 	var stream *quic.Stream
-	var err error
 
 	// OS signal channel (SIGINT, SIGTERM, SIGQUIT) – allows graceful shutdown
 	// instead of abruptly killing the process.
@@ -64,16 +69,73 @@ func main() {
 	for {
 		switch state {
 		case StateDisconnected:
-			// No active connection – try to establish a new QUIC session to the Hub.
 			fmt.Println("[System] Connecting to Hub...")
-			conn, err = quic.DialAddr(context.Background(), "127.0.0.1:9999", tlsConf, nil)
+
+			hubAddr := os.Getenv("KITTY_HUB_ADDR")
+			if hubAddr == "" {
+				hubAddr = "127.0.0.1:9999"
+			}
+
+			conn, err = quic.DialAddr(context.Background(), hubAddr, tlsConf, nil)
 			if err != nil {
 				fmt.Println("[System] Connection error:", err)
 				time.Sleep(2 * time.Second)
 				continue
 			}
 
-			// Open a bidirectional stream – all KittyProtocol frames go over this stream.
+			// ==================== TOFU ====================
+			connState := conn.ConnectionState()
+			if len(connState.TLS.PeerCertificates) == 0 {
+				fmt.Println("[Security] No server certificate presented. Aborting.")
+				conn.CloseWithError(0, "no cert")
+				state = StateDisconnected
+				continue
+			}
+
+			serverCert := connState.TLS.PeerCertificates[0]
+
+			// Jeśli nie ma pinned cert – zapisujemy pierwszy
+			if _, err := os.Stat("certs/trusted_cert.pem"); os.IsNotExist(err) {
+				pemData := pem.EncodeToMemory(&pem.Block{
+					Type:  "CERTIFICATE",
+					Bytes: serverCert.Raw,
+				})
+				if writeErr := os.WriteFile("certs/trusted_cert.pem", pemData, 0644); writeErr != nil {
+					fmt.Println("[Security] Failed to write trusted_cert.pem:", writeErr)
+					conn.CloseWithError(0, "cannot save cert")
+					state = StateDisconnected
+					continue
+				}
+				fmt.Println("[Security] First connection – server certificate pinned (TOFU).")
+			} else {
+				// Mamy pinned cert – porównujemy DER
+				trustedPEM, readErr := os.ReadFile("certs/trusted_cert.pem")
+				if readErr != nil {
+					fmt.Println("[Security] Failed to read trusted_cert.pem:", readErr)
+					conn.CloseWithError(0, "cannot read cert")
+					state = StateDisconnected
+					continue
+				}
+
+				block, _ := pem.Decode(trustedPEM)
+				if block == nil || block.Type != "CERTIFICATE" {
+					fmt.Println("[Security] trusted_cert.pem is invalid.")
+					conn.CloseWithError(0, "invalid cert file")
+					state = StateDisconnected
+					continue
+				}
+
+				if !bytes.Equal(block.Bytes, serverCert.Raw) {
+					fmt.Println("[Security] WARNING: Server certificate changed! Possible MITM.")
+					conn.CloseWithError(0, "cert mismatch")
+					return
+				}
+
+				fmt.Println("[Security] Server certificate matches pinned certificate.")
+			}
+			// ==================== KONIEC TOFU ====================
+
+			// Otwieramy stream QUIC
 			stream, err = conn.OpenStreamSync(context.Background())
 			if err != nil {
 				fmt.Println("[System] Stream error:", err)
@@ -81,7 +143,6 @@ func main() {
 				continue
 			}
 
-			// HELLO – start of the application-level protocol.
 			sendHello(stream)
 			state = StateHandshaking
 
