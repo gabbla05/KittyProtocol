@@ -6,6 +6,14 @@ import (
 	"time"
 )
 
+// DefaultSessionIdleTimeout defines how long a session may stay inactive
+// before it is considered idle and removed.
+const DefaultSessionIdleTimeout = 60 * time.Second
+
+// DefaultSessionCleanupInterval defines how often the SessionManager
+// scans for idle sessions.
+const DefaultSessionCleanupInterval = 10 * time.Second
+
 // SessionManager manages all active sessions in memory.
 // It periodically scans for idle sessions and closes them.
 // This component is purely transport-level and does not contain
@@ -20,7 +28,7 @@ func NewSessionManager() *SessionManager {
 	sm := &SessionManager{
 		sessions: make(map[string]*Session),
 	}
-	go sm.startCleaner()
+	go sm.startCleaner(DefaultSessionCleanupInterval, DefaultSessionIdleTimeout)
 	return sm
 }
 
@@ -47,14 +55,14 @@ func (sm *SessionManager) Remove(user string) {
 	delete(sm.sessions, user)
 }
 
-// startCleaner periodically checks for sessions idle for more than 60 seconds
+// startCleaner periodically checks for sessions idle for more than idleTimeout
 // and closes them. This ensures resource cleanup and prevents stale sessions.
-func (sm *SessionManager) startCleaner() {
-	ticker := time.NewTicker(10 * time.Second)
+func (sm *SessionManager) startCleaner(interval, idleTimeout time.Duration) {
+	ticker := time.NewTicker(interval)
 	for range ticker.C {
 		sm.mu.Lock()
 		for user, sess := range sm.sessions {
-			if time.Since(sess.LastActive) > 60*time.Second {
+			if time.Since(sess.LastActive) > idleTimeout {
 				fmt.Printf("[Protection] Idle Timeout: %s. Removing session.\n", user)
 				if sess.CloseFunc != nil {
 					sess.CloseFunc()
@@ -71,24 +79,11 @@ func NewSessionManagerWithInterval(interval time.Duration, idle time.Duration) *
 	sm := &SessionManager{
 		sessions: make(map[string]*Session),
 	}
-	go func() {
-		ticker := time.NewTicker(interval)
-		for range ticker.C {
-			sm.mu.Lock()
-			for user, sess := range sm.sessions {
-				if time.Since(sess.LastActive) > idle {
-					if sess.CloseFunc != nil {
-						sess.CloseFunc()
-					}
-					delete(sm.sessions, user)
-				}
-			}
-			sm.mu.Unlock()
-		}
-	}()
+	go sm.startCleaner(interval, idle)
 	return sm
 }
 
+// IsOnline returns true if there is an active session for the given user.
 func (sm *SessionManager) IsOnline(user string) bool {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
