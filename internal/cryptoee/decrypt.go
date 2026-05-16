@@ -10,6 +10,7 @@ import (
 )
 
 // DecryptAndVerify verifies HMAC and decrypts BASE64(nonce||cipher).
+// It expects HMAC(cipher || msg_id || target) as BASE64(macB64).
 func DecryptAndVerify(msgID int64, target, payloadB64, macB64 string) (string, error) {
 	kEnc, kMac, err := DeriveKeys()
 	if err != nil {
@@ -44,7 +45,7 @@ func DecryptAndVerify(msgID int64, target, payloadB64, macB64 string) (string, e
 	nonce := raw[:nonceSize]
 	ciphertext := raw[nonceSize:]
 
-	// Recompute HMAC
+	// Recompute HMAC(cipher || msg_id || target).
 	macInput := buildMACInput(ciphertext, msgID, target)
 	h := hmac.New(sha256.New, kMac)
 	h.Write(macInput)
