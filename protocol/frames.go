@@ -5,6 +5,24 @@ import (
 	"fmt"
 )
 
+// Frame type constants – single source of truth for all frame type strings.
+const (
+	FrameTypeHello     = "HELLO"
+	FrameTypeAuth      = "AUTH"
+	FrameTypeData      = "DATA"
+	FrameTypeMeowOK    = "MEOW_OK"
+	FrameTypeError     = "ERROR"
+	FrameTypeGetStatus = "GET_STATUS"
+	FrameTypeStatusRes = "STATUS_RES"
+	FrameTypePing      = "PING"
+	FrameTypeBye       = "BYE"
+)
+
+// Common error code constants used in protocol-level validation.
+const (
+	ErrCodeInvalidFrame = "ERR_02" // generic "invalid frame" / "bad format" error
+)
+
 // BaseFrame contains fields common to every frame.
 type BaseFrame struct {
 	Type  string `json:"type"`   // e.g. "HELLO", "AUTH", "DATA"
@@ -68,15 +86,15 @@ type ByeFrame struct{ BaseFrame }
 func GetFrameType(data []byte) (string, int64, error) {
 	var base BaseFrame
 	if err := json.Unmarshal(data, &base); err != nil {
-		return "", 0, fmt.Errorf("ERR_02: JSON parsing error")
+		return "", 0, fmt.Errorf("%s: JSON parsing error", ErrCodeInvalidFrame)
 	}
 	// Strict validation of required fields.
 	if base.Type == "" || base.MsgID == 0 {
-		return "", 0, fmt.Errorf("ERR_02: missing required fields (type/msg_id)")
+		return "", 0, fmt.Errorf("%s: missing required fields (type/msg_id)", ErrCodeInvalidFrame)
 	}
 	// Verify that the type is one of the supported protocol types.
 	if !IsValidType(base.Type) {
-		return "", 0, fmt.Errorf("ERR_02: unknown or invalid frame type")
+		return "", 0, fmt.Errorf("%s: unknown or invalid frame type", ErrCodeInvalidFrame)
 	}
 	return base.Type, base.MsgID, nil
 }
@@ -84,7 +102,15 @@ func GetFrameType(data []byte) (string, int64, error) {
 // IsValidType checks whether the given frame type is allowed by the protocol.
 func IsValidType(t string) bool {
 	switch t {
-	case "HELLO", "AUTH", "DATA", "MEOW_OK", "ERROR", "GET_STATUS", "STATUS_RES", "PING", "BYE":
+	case FrameTypeHello,
+		FrameTypeAuth,
+		FrameTypeData,
+		FrameTypeMeowOK,
+		FrameTypeError,
+		FrameTypeGetStatus,
+		FrameTypeStatusRes,
+		FrameTypePing,
+		FrameTypeBye:
 		return true
 	}
 	return false
@@ -94,7 +120,7 @@ func IsValidType(t string) bool {
 func ParseHelloFrame(data []byte) (*HelloFrame, error) {
 	var f HelloFrame
 	if err := json.Unmarshal(data, &f); err != nil {
-		return nil, fmt.Errorf("ERR_02: Invalid JSON format")
+		return nil, fmt.Errorf("%s: Invalid JSON format", ErrCodeInvalidFrame)
 	}
 	return &f, nil
 }
@@ -103,10 +129,10 @@ func ParseHelloFrame(data []byte) (*HelloFrame, error) {
 func ParseAuthFrame(data []byte) (*AuthFrame, error) {
 	var f AuthFrame
 	if err := json.Unmarshal(data, &f); err != nil {
-		return nil, fmt.Errorf("ERR_02: Invalid JSON format")
+		return nil, fmt.Errorf("%s: Invalid JSON format", ErrCodeInvalidFrame)
 	}
 	if f.User == "" || f.Pass == "" {
-		return nil, fmt.Errorf("ERR_02: Missing user or pass in AUTH frame")
+		return nil, fmt.Errorf("%s: Missing user or pass in AUTH frame", ErrCodeInvalidFrame)
 	}
 	return &f, nil
 }
@@ -115,10 +141,10 @@ func ParseAuthFrame(data []byte) (*AuthFrame, error) {
 func ParseDataFrame(data []byte) (*DataFrame, error) {
 	var f DataFrame
 	if err := json.Unmarshal(data, &f); err != nil {
-		return nil, fmt.Errorf("ERR_02: Invalid JSON format")
+		return nil, fmt.Errorf("%s: Invalid JSON format", ErrCodeInvalidFrame)
 	}
 	if f.Payload == "" || f.MAC == "" {
-		return nil, fmt.Errorf("ERR_02: Missing payload or MAC in DATA frame")
+		return nil, fmt.Errorf("%s: Missing payload or MAC in DATA frame", ErrCodeInvalidFrame)
 	}
 	return &f, nil
 }
@@ -127,10 +153,10 @@ func ParseDataFrame(data []byte) (*DataFrame, error) {
 func ParseErrorFrame(data []byte) (*ErrorFrame, error) {
 	var f ErrorFrame
 	if err := json.Unmarshal(data, &f); err != nil {
-		return nil, fmt.Errorf("ERR_02: Invalid JSON format")
+		return nil, fmt.Errorf("%s: Invalid JSON format", ErrCodeInvalidFrame)
 	}
 	if f.Code == "" {
-		return nil, fmt.Errorf("ERR_02: Missing error code in ERROR frame")
+		return nil, fmt.Errorf("%s: Missing error code in ERROR frame", ErrCodeInvalidFrame)
 	}
 	return &f, nil
 }
@@ -139,10 +165,10 @@ func ParseErrorFrame(data []byte) (*ErrorFrame, error) {
 func ParseGetStatusFrame(data []byte) (*GetStatusFrame, error) {
 	var f GetStatusFrame
 	if err := json.Unmarshal(data, &f); err != nil {
-		return nil, fmt.Errorf("ERR_02: Invalid JSON format")
+		return nil, fmt.Errorf("%s: Invalid JSON format", ErrCodeInvalidFrame)
 	}
 	if f.Target == "" {
-		return nil, fmt.Errorf("ERR_02: Missing target in GET_STATUS frame")
+		return nil, fmt.Errorf("%s: Missing target in GET_STATUS frame", ErrCodeInvalidFrame)
 	}
 	return &f, nil
 }
@@ -151,10 +177,10 @@ func ParseGetStatusFrame(data []byte) (*GetStatusFrame, error) {
 func ParseStatusResFrame(data []byte) (*StatusResFrame, error) {
 	var f StatusResFrame
 	if err := json.Unmarshal(data, &f); err != nil {
-		return nil, fmt.Errorf("ERR_02: Invalid JSON format")
+		return nil, fmt.Errorf("%s: Invalid JSON format", ErrCodeInvalidFrame)
 	}
 	if f.Target == "" || f.Status == "" {
-		return nil, fmt.Errorf("ERR_02: Missing target or status in STATUS_RES frame")
+		return nil, fmt.Errorf("%s: Missing target or status in STATUS_RES frame", ErrCodeInvalidFrame)
 	}
 	return &f, nil
 }
