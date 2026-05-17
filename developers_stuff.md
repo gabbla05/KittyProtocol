@@ -448,22 +448,51 @@ This enables:
 - run in two directories,
 - each has its own pinned certificate.
 
-## 9. Summary
+## 9. Comprehensive Automated Testing Suite (Stage 3 Additions)
+
+To validate the protocol's stability, routing accuracy, and security mitigation features, a robust automated testing suite has been integrated directly into the Hub layer.
+
+### 9.1. Negative Testing Scenarios (KIT-16)
+Located in `hub/negative_test.go`, these tests verify that the Hub safely rejects improper client state transitions and invalid application-layer semantics:
+- **ERR_04 (Authentication Failure):** Verifies that providing incorrect credentials causes the Hub to emit an `ERR_04` frame and immediately close the underlying stream (`io.EOF`).
+- **ERR_15 (User Offline):** Confirms that attempts to route `DATA` payloads to a non-existent or unauthenticated session are blocked at the router level, returning an `ERR_15` confirmation to the sender.
+
+### 9.2. Headless End-to-End Happy Point Script (KIT-12 / KIT-28)
+Located in `hub/happy_path_test.go`, this script orchestrates a full concurrent lifestyle test of the network without spawning front-end artifacts:
+- Spins up an ephemeral, random-port QUIC listener with valid local TLS configuration.
+- Concurrently registers and authenticates two distinct cryptographic sessions (`alice` and `bob`) using synchronized mock database parameters.
+- Validates that a raw Base64 payload transmitted by `alice` is structurally modified with the appropriate `Sender` metadata and successfully routed into `bob`'s active consumer stream.
+
+### 9.3. Security & Injection Defense Tests (KIT-29)
+Located in `hub/security_test.go`, these tests expose the network boundary to deliberate protocol attacks:
+- **Replay Attack Vector (ERR_06):** Re-transmits an identical `DATA` frame containing a previously processed `msg_id`. Verifies that the Hub's TTL eviction cache flags the transaction, drops the frame, and returns an `ERR_06` status.
+- **Payload Injection Vector (ERR_02):** Injects non-JSON, malicious structural strings (`DROP TABLE...`) into the active stream. Confirmed that the strict frame parser prevents memory panics, drops the corrupted bytes, and responds with `ERR_02`.
+
+### 9.4. CPU Performance & Thread-Scaling Benchmarks (KIT-15)
+Located in `hub/performance_test.go`, this benchmarking framework evaluates pure packet-forwarding throughput and processing latency across varying hardware configurations.
+- **Hermetic Architecture:** Rather than stripping production configuration blocks from the live hub code, the benchmark directly overrides the active session's pointer memory with a high-capacity `RateLimiter` allowing up to 10M frames/sec.
+- **Thread Control:** Leverages `runtime.GOMAXPROCS` to programmatically choke or expand CPU access, rendering isolated scaling reports for 1, 2, 4, 8, and 16 hardware units.
+
+### 9.4a Execution Guide: Running the Performance Benchmarks
+
+To run the hardware performance benchmarks and view transaction latency profiles without executing standard unit tests, run the following command in the project root:
+
+```bash
+go test ./hub -bench=BenchmarkHubRouting -v -run=^$
+
+```
+
+## 10. Summary
+
 We introduced:
-- GET_STATUS / STATUS_RES,
-- full status routing,
-- environment variables,
-- .env loader,
-- elimination of hard‑coded IP,
-- full QUIC/TLS encryption,
-- TOFU (Trust On First Use),
-- automatic certificate pinning,
-- MITM detection,
-- cleanup of developer tools.
+- GET_STATUS / STATUS_RES (full status routing),
+- environment variables, .env loader & no hard-coded IP,
+- full QUIC/TLS encryption with TOFU (certificate pinning, MITM detection),
+- automated test suite (headless E2E, negative scenarios, injection/replay defense),
+- CPU performance and routing benchmarks (with history logging).
 
 KittyProtocol is now:
-- secure,
-- MITM‑resistant,
-- configurable,
-- deployment‑ready,
+- secure and MITM-resistant,
+- configurable and deployment-ready,
+- fully tested, benchmarked, and scalable,
 - aligned with security best practices.
