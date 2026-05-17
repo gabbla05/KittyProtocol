@@ -8,6 +8,7 @@ import (
 	"os"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,9 +18,16 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
+// GLOBALNY LICZNIK PAKIETÓW - Gwarantuje brak kolizji z Anti-Replay
+var globalMsgID int64 = time.Now().UnixNano()
+
 func BenchmarkHubRouting(b *testing.B) {
 	cores := []int{1, 2, 4, 8, 16}
 	maxCores := runtime.NumCPU()
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = "Unknown-PC"
+	}
 
 	for _, c := range cores {
 		if c > maxCores {
@@ -27,9 +35,18 @@ func BenchmarkHubRouting(b *testing.B) {
 		}
 
 		b.Run(fmt.Sprintf("Cores_%d", c), func(b *testing.B) {
-			runtime.GOMAXPROCS(c)
+			// Zapisujemy poprzednie ustawienia i przywracamy je po teście,
+			// żeby framework testowy Go nie rzucał błędem "left GOMAXPROCS".
+			oldProcs := runtime.GOMAXPROCS(c)
+			defer runtime.GOMAXPROCS(oldProcs)
 
-			globalSessions = protection.NewSessionManager()
+			// 1. Czysty stan sesji dla każdej fazy benchmarku
+			if globalSessions != nil {
+				globalSessions.Remove("alice")
+				globalSessions.Remove("bob")
+			} else {
+				globalSessions = protection.NewSessionManager()
+			}
 
 			_ = os.MkdirAll("../certs", 0755)
 			tlsConf, _ := certmanager.SetupTLSConfig("../certs/cert.pem", "../certs/key.pem")
@@ -58,35 +75,38 @@ func BenchmarkHubRouting(b *testing.B) {
 				NextProtos:         []string{"kitty-quic-v1"},
 			}
 
-			// Podłączenie Alice
+			// 2. PODŁĄCZENIE ALICE
 			aliceConn, _ := quic.DialAddr(context.Background(), listener.Addr().String(), clientTLS, nil)
 			defer aliceConn.CloseWithError(0, "")
 			aliceStream, _ := aliceConn.OpenStreamSync(context.Background())
 
+			atomic.AddInt64(&globalMsgID, 1)
 			authAlice := protocol.AuthFrame{
-				BaseFrame: protocol.BaseFrame{Type: "AUTH", MsgID: time.Now().UnixMilli()},
+				BaseFrame: protocol.BaseFrame{Type: "AUTH", MsgID: globalMsgID},
 				User:      "alice",
 				Pass:      "secret",
 			}
 			ab, _ := json.Marshal(authAlice)
-			aliceStream.Write(ab)
+			aliceStream.Write(append(ab, '\n'))
 			buf := make([]byte, 1024)
 			aliceStream.Read(buf)
 
-			// Podłączenie Boba
+			// 3. PODŁĄCZENIE BOBA
 			bobConn, _ := quic.DialAddr(context.Background(), listener.Addr().String(), clientTLS, nil)
 			defer bobConn.CloseWithError(0, "")
 			bobStream, _ := bobConn.OpenStreamSync(context.Background())
 
+			atomic.AddInt64(&globalMsgID, 1)
 			authBob := protocol.AuthFrame{
-				BaseFrame: protocol.BaseFrame{Type: "AUTH", MsgID: time.Now().UnixMilli()},
+				BaseFrame: protocol.BaseFrame{Type: "AUTH", MsgID: globalMsgID},
 				User:      "bob",
 				Pass:      "secret",
 			}
 			bb, _ := json.Marshal(authBob)
-			bobStream.Write(bb)
+			bobStream.Write(append(bb, '\n'))
 			bobStream.Read(buf)
 
+			// 4. WYŁĄCZENIE LIMITÓW RUCHU (Rate Limiter)
 			if aliceSess, ok := globalSessions.Get("alice"); ok {
 				aliceSess.Limiter = protection.NewRateLimiter(9999999)
 			}
@@ -101,82 +121,105 @@ func BenchmarkHubRouting(b *testing.B) {
 				MAC:       "dummy_mac",
 			}
 
+			// Bezpieczny timeout (10 sekund), zapobiega wiecznemu wiszeniu testu
+			bobStream.SetReadDeadline(time.Now().Add(10 * time.Second))
+
 			b.ResetTimer()
-			startTime := time.Now() // Śledzenie surowego czasu na potrzeby logów zewnętrznych
+			startTime := time.Now()
 
 			var wg sync.WaitGroup
-			wg.Add(2)
+			wg.Add(1)
+			var fatalError bool
 
+			// 5A. KONSUMENT BOBA
 			go func() {
 				defer wg.Done()
 				decoder := json.NewDecoder(bobStream)
 				for i := 0; i < b.N; i++ {
-					var dummy map[string]interface{}
-					if err := decoder.Decode(&dummy); err != nil {
-						break
+					var resp map[string]interface{}
+					if err := decoder.Decode(&resp); err != nil {
+						b.Errorf("\n[BOB] Serwer przerwał routing na pakiecie %d. Błąd: %v", i, err)
+						fatalError = true
+						return
+					}
+					if t, ok := resp["type"].(string); ok && t == "ERROR" {
+						b.Errorf("\n[BOB] Dostał błąd od Huba: %v", resp)
+						fatalError = true
+						return
 					}
 				}
 			}()
 
+			// 5B. KONSUMENT ALICE (Czyści potwierdzenia w tle)
 			go func() {
-				defer wg.Done()
 				decoder := json.NewDecoder(aliceStream)
-				for i := 0; i < b.N; i++ {
+				for {
 					var dummy map[string]interface{}
 					if err := decoder.Decode(&dummy); err != nil {
-						break
+						return
 					}
 				}
 			}()
 
+			// 5C. PRODUCENT ALICE
 			for i := 0; i < b.N; i++ {
-				dataFrame.BaseFrame.MsgID = int64(i + 1)
+				if fatalError {
+					break
+				}
+
+				// Używamy bezpiecznego, rosnącego o 1 licznika. Nigdy nie wygeneruje kolizji.
+				atomic.AddInt64(&globalMsgID, 1)
+				dataFrame.BaseFrame.MsgID = globalMsgID
+
 				mb, _ := json.Marshal(dataFrame)
-				aliceStream.Write(mb)
+				if _, err := aliceStream.Write(append(mb, '\n')); err != nil {
+					break
+				}
+
+				// 100 mikrosekund pauzy zapobiega zapchaniu rur sieciowych
+				time.Sleep(100 * time.Microsecond)
 			}
 
 			wg.Wait()
 			totalDuration := time.Since(startTime)
 
-			// Automatyczny zapis wyniku do pliku historycznego
-			saveToHistory(c, b.N, totalDuration)
+			if !fatalError {
+				saveToHistory(hostname, maxCores, c, b.N, totalDuration)
+			}
 		})
 	}
 }
 
-// saveToHistory dopisuje wynik testu do pliku benchmark_history.md w czytelnej formie tabeli.
-func saveToHistory(cores int, totalOps int, duration time.Duration) {
+func saveToHistory(hostname string, maxCores int, testCores int, totalOps int, duration time.Duration) {
 	filename := "benchmark_history.md"
-
-	// Sprawdzenie, czy plik istnieje, żeby wiedzieć czy dodać nagłówek tabeli
 	_, err := os.Stat(filename)
 	isNewFile := os.IsNotExist(err)
 
 	f, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		fmt.Printf("[Performance] Błąd zapisu do pliku logów: %v\n", err)
 		return
 	}
 	defer f.Close()
 
 	if isNewFile {
 		f.WriteString("# KittyProtocol - Hub Routing Performance History\n\n")
-		f.WriteString("| Execution Time | CPU Cores | Total Packets Routed | Combined Duration | Latency Per Packet | Throughput |\n")
-		f.WriteString("|--- |--- |--- |--- |--- |--- |\n")
+		f.WriteString("| Date | PC Name | Max Cores | Used Cores | Packets | Duration | Latency/pkt | Throughput |\n")
+		f.WriteString("|--- |--- |--- |--- |--- |--- |--- |--- |\n")
 	}
 
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
 	latencyNs := float64(duration.Nanoseconds()) / float64(totalOps)
 	throughputMsgSec := float64(totalOps) / duration.Seconds()
 
-	row := fmt.Sprintf("| %s | %d cores | %d | %s | %.2f ns/op | %.2f msg/s |\n",
+	row := fmt.Sprintf("| %s | %s | %d | %d | %d | %s | %.2f ns | %.2f msg/s |\n",
 		timestamp,
-		cores,
+		hostname,
+		maxCores,
+		testCores,
 		totalOps,
 		duration.Round(time.Millisecond),
 		latencyNs,
 		throughputMsgSec,
 	)
-
 	f.WriteString(row)
 }
