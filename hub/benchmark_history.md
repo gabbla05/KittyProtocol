@@ -1,12 +1,20 @@
 # KittyProtocol - Hub Routing Performance History
+### go test ./hub -bench=BenchmarkHubRouting -v -run=^$
 
-| Execution Time | CPU Cores | Total Packets Routed | Combined Duration | Latency Per Packet | Throughput |
-|--- |--- |--- |--- |--- |--- |
-| 2026-05-17 11:02:12 | 1 cores | 1 | 0s | 0.00 ns/op | +Inf msg/s |
-| 2026-05-17 11:02:42 | 1 cores | 94 | 30.103s | 320249120.21 ns/op | 3.12 msg/s |
-| 2026-05-17 11:02:42 | 2 cores | 1 | 2ms | 1513800.00 ns/op | 660.59 msg/s |
-| 2026-05-17 11:03:12 | 2 cores | 100 | 30.003s | 300026217.00 ns/op | 3.33 msg/s |
-| 2026-05-17 11:03:12 | 4 cores | 1 | 0s | 0.00 ns/op | +Inf msg/s |
-| 2026-05-17 11:03:42 | 4 cores | 100 | 30.057s | 300568463.00 ns/op | 3.33 msg/s |
-| 2026-05-17 11:03:42 | 8 cores | 1 | 1ms | 1108800.00 ns/op | 901.88 msg/s |
-| 2026-05-17 11:04:13 | 8 cores | 100 | 30.052s | 300524350.00 ns/op | 3.33 msg/s |
+| Date | PC Name | Max Cores | Used Cores | Packets | Duration | Latency/pkt | Throughput |
+|--- |--- |--- |--- |--- |--- |--- |--- |
+| 2026-05-17 20:55:53 | Dell_Latitude | 12 | 1 | 1 | 1ms | 1032800.00 ns | 968.24 msg/s |
+| 2026-05-17 20:56:03 | Dell_Latitude | 12 | 2 | 1 | 1ms | 1381500.00 ns | 723.85 msg/s |
+| 2026-05-17 20:56:04 | Dell_Latitude | 12 | 2 | 100 | 55ms | 549923.00 ns | 1818.44 msg/s |
+| 2026-05-17 20:56:14 | Dell_Latitude | 12 | 4 | 1 | 1ms | 1004600.00 ns | 995.42 msg/s |
+| 2026-05-17 20:56:14 | Dell_Latitude | 12 | 4 | 100 | 54ms | 535490.00 ns | 1867.45 msg/s |
+| 2026-05-17 20:56:24 | Dell_Latitude | 12 | 8 | 1 | 1ms | 864700.00 ns | 1156.47 msg/s |
+| 2026-05-17 20:56:24 | Dell_Latitude | 12 | 8 | 100 | 54ms | 535014.00 ns | 1869.11 msg/s |
+| 2026-05-17 20:56:26 | Dell_Latitude | 12 | 8 | 2233 | 1.211s | 542451.14 ns | 1843.48 msg/s |
+| 2026-05-17 20:58:14 | Dell_Latitude | 12 | 1 | 1 | 1ms | 999700.00 ns | 1000.30 msg/s |
+| 2026-05-17 20:58:14 | Dell_Latitude | 12 | 1 | 100 | 79ms | 788081.00 ns | 1268.91 msg/s |
+| 2026-05-17 20:58:24 | Dell_Latitude | 12 | 2 | 1 | 1ms | 505500.00 ns | 1978.24 msg/s |
+| 2026-05-17 20:58:35 | Dell_Latitude | 12 | 4 | 1 | 1ms | 522300.00 ns | 1914.61 msg/s |
+| 2026-05-17 20:58:35 | Dell_Latitude | 12 | 4 | 100 | 55ms | 548279.00 ns | 1823.89 msg/s |
+| 2026-05-17 20:58:45 | Dell_Latitude | 12 | 8 | 1 | 1ms | 1287400.00 ns | 776.76 msg/s |
+| 2026-05-17 20:58:45 | Dell_Latitude | 12 | 8 | 100 | 57ms | 568281.00 ns | 1759.69 msg/s |
