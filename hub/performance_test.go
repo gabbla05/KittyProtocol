@@ -102,7 +102,7 @@ func BenchmarkHubRouting(b *testing.B) {
 			}
 
 			b.ResetTimer()
-			startTime := time.Now() // Śledzenie surowego czasu na potrzeby logów zewnętrznych
+			startTime := time.Now()
 
 			var wg sync.WaitGroup
 			wg.Add(2)
@@ -130,7 +130,8 @@ func BenchmarkHubRouting(b *testing.B) {
 			}()
 
 			for i := 0; i < b.N; i++ {
-				dataFrame.BaseFrame.MsgID = int64(i + 1)
+				// POPRAWKA: Używamy nanosekund, aby MsgID było zawsze unikalne w trakcie benchmarku
+				dataFrame.BaseFrame.MsgID = time.Now().UnixNano() + int64(i)
 				mb, _ := json.Marshal(dataFrame)
 				aliceStream.Write(mb)
 			}
@@ -138,17 +139,14 @@ func BenchmarkHubRouting(b *testing.B) {
 			wg.Wait()
 			totalDuration := time.Since(startTime)
 
-			// Automatyczny zapis wyniku do pliku historycznego
 			saveToHistory(c, b.N, totalDuration)
 		})
 	}
 }
 
-// saveToHistory dopisuje wynik testu do pliku benchmark_history.md w czytelnej formie tabeli.
 func saveToHistory(cores int, totalOps int, duration time.Duration) {
 	filename := "benchmark_history.md"
 
-	// Sprawdzenie, czy plik istnieje, żeby wiedzieć czy dodać nagłówek tabeli
 	_, err := os.Stat(filename)
 	isNewFile := os.IsNotExist(err)
 
