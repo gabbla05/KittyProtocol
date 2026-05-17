@@ -17,20 +17,16 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
-// W testach wydajnościowych używamy BenchmarkXxx zamiast TestXxx
 func BenchmarkHubRouting(b *testing.B) {
-	// Definiujemy, na ilu rdzeniach chcemy testować serwer
 	cores := []int{1, 2, 4, 8, 16}
 	maxCores := runtime.NumCPU()
 
 	for _, c := range cores {
 		if c > maxCores {
-			continue // Pomijamy testowanie na większej liczbie rdzeni, niż maszyna fizycznie posiada
+			continue
 		}
 
-		// Uruchomienie sub-benchmarku dla danej liczby rdzeni
 		b.Run(fmt.Sprintf("Cores_%d", c), func(b *testing.B) {
-			// Kluczowe dla zadania: narzucenie Hubowi limitu wątków procesora!
 			runtime.GOMAXPROCS(c)
 
 			globalSessions = protection.NewSessionManager()
@@ -62,9 +58,7 @@ func BenchmarkHubRouting(b *testing.B) {
 				NextProtos:         []string{"kitty-quic-v1"},
 			}
 
-			// ==========================================
-			// Podłączenie Alice (Nadawca)
-			// ==========================================
+			// Podłączenie Alice
 			aliceConn, _ := quic.DialAddr(context.Background(), listener.Addr().String(), clientTLS, nil)
 			defer aliceConn.CloseWithError(0, "")
 			aliceStream, _ := aliceConn.OpenStreamSync(context.Background())
@@ -79,9 +73,7 @@ func BenchmarkHubRouting(b *testing.B) {
 			buf := make([]byte, 1024)
 			aliceStream.Read(buf)
 
-			// ==========================================
-			// Podłączenie Boba (Odbiorca)
-			// ==========================================
+			// Podłączenie Boba
 			bobConn, _ := quic.DialAddr(context.Background(), listener.Addr().String(), clientTLS, nil)
 			defer bobConn.CloseWithError(0, "")
 			bobStream, _ := bobConn.OpenStreamSync(context.Background())
@@ -95,10 +87,6 @@ func BenchmarkHubRouting(b *testing.B) {
 			bobStream.Write(bb)
 			bobStream.Read(buf)
 
-			// ========================================================
-			// NADPISANIE RATE LIMITERA NA POTRZEBY TESTU WYDAJNOŚCI
-			// Dzięki temu nie musimy ingerować w kod produkcyjny!
-			// ========================================================
 			if aliceSess, ok := globalSessions.Get("alice"); ok {
 				aliceSess.Limiter = protection.NewRateLimiter(9999999)
 			}
@@ -106,7 +94,6 @@ func BenchmarkHubRouting(b *testing.B) {
 				bobSess.Limiter = protection.NewRateLimiter(9999999)
 			}
 
-			// Szablon wiadomości
 			dataFrame := protocol.DataFrame{
 				BaseFrame: protocol.BaseFrame{Type: "DATA", MsgID: 0},
 				Target:    "bob",
@@ -114,13 +101,12 @@ func BenchmarkHubRouting(b *testing.B) {
 				MAC:       "dummy_mac",
 			}
 
-			// Zaczynamy mierzyć czas! (pomijamy czas łączenia QUIC i logowania)
 			b.ResetTimer()
+			startTime := time.Now() // Śledzenie surowego czasu na potrzeby logów zewnętrznych
 
 			var wg sync.WaitGroup
 			wg.Add(2)
 
-			// Konsument Boba (musi asynchronicznie odbierać zroutowane wiadomości z Huba)
 			go func() {
 				defer wg.Done()
 				decoder := json.NewDecoder(bobStream)
@@ -132,7 +118,6 @@ func BenchmarkHubRouting(b *testing.B) {
 				}
 			}()
 
-			// Konsument Alice (musi odbierać potwierdzenia MEOW_OK, by nie zablokować bufora)
 			go func() {
 				defer wg.Done()
 				decoder := json.NewDecoder(aliceStream)
@@ -144,16 +129,54 @@ func BenchmarkHubRouting(b *testing.B) {
 				}
 			}()
 
-			// Producent Alice (floodowanie Huba wiadomościami DATA)
 			for i := 0; i < b.N; i++ {
-				// WAŻNE: Aktualizacja MsgID, żeby nasz własny mechanizm ReplayProtection nie zablokował testu!
 				dataFrame.BaseFrame.MsgID = int64(i + 1)
 				mb, _ := json.Marshal(dataFrame)
 				aliceStream.Write(mb)
 			}
 
-			// Czekamy, aż Bob odbierze wszystkie b.N wiadomości
 			wg.Wait()
+			totalDuration := time.Since(startTime)
+
+			// Automatyczny zapis wyniku do pliku historycznego
+			saveToHistory(c, b.N, totalDuration)
 		})
 	}
+}
+
+// saveToHistory dopisuje wynik testu do pliku benchmark_history.md w czytelnej formie tabeli.
+func saveToHistory(cores int, totalOps int, duration time.Duration) {
+	filename := "benchmark_history.md"
+
+	// Sprawdzenie, czy plik istnieje, żeby wiedzieć czy dodać nagłówek tabeli
+	_, err := os.Stat(filename)
+	isNewFile := os.IsNotExist(err)
+
+	f, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Printf("[Performance] Błąd zapisu do pliku logów: %v\n", err)
+		return
+	}
+	defer f.Close()
+
+	if isNewFile {
+		f.WriteString("# KittyProtocol - Hub Routing Performance History\n\n")
+		f.WriteString("| Execution Time | CPU Cores | Total Packets Routed | Combined Duration | Latency Per Packet | Throughput |\n")
+		f.WriteString("|--- |--- |--- |--- |--- |--- |\n")
+	}
+
+	timestamp := time.Now().Format("2006-01-02 15:04:05")
+	latencyNs := float64(duration.Nanoseconds()) / float64(totalOps)
+	throughputMsgSec := float64(totalOps) / duration.Seconds()
+
+	row := fmt.Sprintf("| %s | %d cores | %d | %s | %.2f ns/op | %.2f msg/s |\n",
+		timestamp,
+		cores,
+		totalOps,
+		duration.Round(time.Millisecond),
+		latencyNs,
+		throughputMsgSec,
+	)
+
+	f.WriteString(row)
 }
