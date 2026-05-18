@@ -3,6 +3,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/gabbla05/KittyProtocol/internal/protection"
 	"github.com/gabbla05/KittyProtocol/protocol"
@@ -10,12 +11,10 @@ import (
 )
 
 // routeData forwards a DATA frame from the sender to the target session.
-// It performs only protocol-level checks (session existence, stream availability),
-// without imposing any application-level "chat state" semantics.
+// It performs only protocol-level checks (session existence, stream availability).
 func routeData(frame protocol.DataFrame, sender *protection.Session, senderStream *quic.Stream) bool {
 	targetSess, ok := globalSessions.Get(frame.Target)
 	if !ok {
-		// Receiver has no active session.
 		sendError(senderStream, "ERR_15", "Receiver offline")
 		return false
 	}
@@ -24,9 +23,6 @@ func routeData(frame protocol.DataFrame, sender *protection.Session, senderStrea
 		sendError(senderStream, "ERR_10", "Receiver stream not available")
 		return false
 	}
-
-	// Pure routing: Hub does not enforce whether the receiver "accepted" the chat.
-	// That logic belongs to the application layer (e.g. Meowssenger).
 
 	forward := protocol.DataFrame{
 		BaseFrame: protocol.BaseFrame{
@@ -46,6 +42,7 @@ func routeData(frame protocol.DataFrame, sender *protection.Session, senderStrea
 	}
 
 	if _, err := targetSess.Stream.Write(fb); err != nil {
+		fmt.Println("[Hub] Failed to deliver DATA to receiver:", err)
 		sendError(senderStream, "ERR_10", "Failed to deliver to receiver")
 		return false
 	}

@@ -1,7 +1,9 @@
+// hub/auth_flow.go
 package main
 
 import (
-	"encoding/json" // Dodano dla json.Marshal
+	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/gabbla05/KittyProtocol/internal/protection"
@@ -12,7 +14,6 @@ import (
 // handleHELLO processes the initial HELLO frame and starts the AUTH timeout timer.
 // It responds with MEOW_OK(status="Ready for auth").
 func handleHELLO(stream *quic.Stream, conn *quic.Conn) *protection.AuthTimer {
-	// TASK 10: Użycie MeowOkFrame zamiast UniversalFrame
 	ok := protocol.MeowOkFrame{
 		BaseFrame: protocol.BaseFrame{
 			Type:  "MEOW_OK",
@@ -20,12 +21,14 @@ func handleHELLO(stream *quic.Stream, conn *quic.Conn) *protection.AuthTimer {
 		},
 		Status: "Ready for auth",
 	}
-	b, _ := json.Marshal(ok)
-	stream.Write(b)
+	if b, err := json.Marshal(ok); err == nil {
+		_, _ = stream.Write(b)
+	} else {
+		fmt.Println("[Hub] Failed to send MEOW_OK:", err)
+	}
 
-	// Start 20-second AUTH timeout
+	// Start 20-second AUTH timeout.
 	return protection.StartAuthTimer(func() {
-		// TASK 10: Użycie ErrorFrame zamiast UniversalFrame
 		errFrame := protocol.ErrorFrame{
 			BaseFrame: protocol.BaseFrame{
 				Type:  "ERROR",
@@ -34,8 +37,9 @@ func handleHELLO(stream *quic.Stream, conn *quic.Conn) *protection.AuthTimer {
 			Code: "ERR_03",
 			Desc: "Authorization timeout reached",
 		}
-		eb, _ := json.Marshal(errFrame)
-		stream.Write(eb)
+		if eb, err := json.Marshal(errFrame); err == nil {
+			_, _ = stream.Write(eb)
+		}
 		conn.CloseWithError(0x03, "ERR_03: Auth Timeout")
 	})
 }
