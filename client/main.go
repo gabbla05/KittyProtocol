@@ -6,17 +6,19 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/gabbla05/KittyProtocol/client/api"
 )
 
 // Main entry point for the CLI version of the KittyProtocol client.
 // All protocol logic is inside KittyClient.
 // This file only orchestrates the flow.
 func main() {
-	client := NewKittyClient()
+	client := api.NewKittyClient()
 	ui := NewCliUI(client)
 
 	// Register UI as ACK event handler
-	client.ackMgr.RegisterHandler(ui)
+	client.RegisterAckHandler(ui)
 
 	// Handle OS signals (Ctrl+C, SIGTERM)
 	sigCh := make(chan os.Signal, 1)

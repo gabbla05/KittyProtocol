@@ -1,7 +1,8 @@
-package main
+package api
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/gabbla05/KittyProtocol/internal/cryptoee"
@@ -120,18 +121,50 @@ func (c *KittyClient) Close() {
 	if c.conn != nil {
 		_ = c.conn.CloseWithError(0, "client closed")
 	}
+
+	if c.kEnc != nil {
+		cryptoee.Zeroize(c.kEnc)
+	}
+	if c.kMac != nil {
+		cryptoee.Zeroize(c.kMac)
+	}
 }
 
-func (c *KittyClient) SetSharedSecret(secret string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	kEnc, kMac, err := cryptoee.DeriveKeysFromSecret([]byte(secret))
+func (c *KittyClient) SetSharedSecret(secret []byte) error {
+	kEnc, kMac, err := cryptoee.DeriveKeysFromSecret(secret)
 	if err != nil {
 		return err
 	}
 
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	c.kEnc = kEnc
 	c.kMac = kMac
 	return nil
+}
+
+// RegisterAckHandler registers an AckEventHandler in the underlying AckManager.
+func (c *KittyClient) RegisterAckHandler(h AckEventHandler) {
+	if c.ackMgr == nil {
+		return
+	}
+	c.ackMgr.RegisterHandler(h)
+}
+
+// ReplayLastFrame resends the last raw frame written on the stream, if any.
+// Used only for testing replay protection from the CLI.
+func (c *KittyClient) ReplayLastFrame() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.lastFrame == nil {
+		return fmt.Errorf("no frame to replay")
+	}
+	if c.stream == nil {
+		return fmt.Errorf("stream is nil")
+	}
+
+	_, err := c.stream.Write(c.lastFrame)
+	return err
 }

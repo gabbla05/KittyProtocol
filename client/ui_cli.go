@@ -2,20 +2,23 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"os"
 	"strings"
+
+	"github.com/gabbla05/KittyProtocol/client/api"
 )
 
 // CliUI implements AckEventHandler and provides a simple terminal UI.
 type CliUI struct {
-	client *KittyClient
+	client *api.KittyClient
 	reader *bufio.Reader
 }
 
 // NewCliUI creates a new CLI wrapper for KittyClient.
-func NewCliUI(c *KittyClient) *CliUI {
+func NewCliUI(c *api.KittyClient) *CliUI {
 	return &CliUI{
 		client: c,
 		reader: bufio.NewReader(os.Stdin),
@@ -57,14 +60,14 @@ func (ui *CliUI) ReadTarget() string {
 	}
 }
 
-func (ui *CliUI) ReadSharedSecret() string {
+func (ui *CliUI) ReadSharedSecret() []byte {
 	for {
 		fmt.Print("Wspólny sekret (K_AB) dla tej rozmowy: ")
 		secret, _ := ui.reader.ReadString('\n')
 		secret = strings.TrimSpace(secret)
 
 		if secret != "" {
-			return secret
+			return []byte(secret)
 		}
 		fmt.Println("[Client: UI-cli] Sekret nie może być pusty.")
 	}
@@ -107,6 +110,44 @@ func (ui *CliUI) RunSendLoop(disconnected chan struct{}) {
 			return
 		}
 
+		if after, ok := strings.CutPrefix(text, "/setkey "); ok {
+			secret := strings.TrimSpace(after)
+			if secret == "" {
+				fmt.Println("[Client: UI-cli] Usage: /setkey <secret>")
+				continue
+			}
+			if err := ui.client.SetSharedSecret([]byte(secret)); err != nil {
+				fmt.Println("[Client: UI-cli] Failed to set shared secret:", err)
+			} else {
+				fmt.Println("[Client: UI-cli] Shared secret set.")
+			}
+			continue
+		}
+
+		if after, ok := strings.CutPrefix(text, "/loadkey "); ok {
+			path := strings.TrimSpace(after)
+			if path == "" {
+				fmt.Println("[Client: UI-cli] Usage: /loadkey <path>")
+				continue
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				fmt.Println("[Client: UI-cli] Failed to read key file:", err)
+				continue
+			}
+			data = bytes.TrimSpace(data)
+			if len(data) == 0 {
+				fmt.Println("[Client: UI-cli] Key file is empty.")
+				continue
+			}
+			if err := ui.client.SetSharedSecret(data); err != nil {
+				fmt.Println("[Client: UI-cli] Failed to set shared secret from file:", err)
+			} else {
+				fmt.Println("[Client: UI-cli] Shared secret loaded from file.")
+			}
+			continue
+		}
+
 		if after, ok := strings.CutPrefix(text, "/status "); ok {
 			target := strings.TrimSpace(after)
 			if target == "" {
@@ -118,22 +159,11 @@ func (ui *CliUI) RunSendLoop(disconnected chan struct{}) {
 		}
 
 		if text == "/replay" {
-			ui.client.mu.Lock()
-			frame := ui.client.lastFrame
-			ui.client.mu.Unlock()
-
-			if frame == nil {
-				fmt.Println("[Client] No message to replay.")
-				continue
-			}
-
-			_, err := ui.client.stream.Write(frame)
-			if err != nil {
-				fmt.Println("[Client: UI-cli] Replay send error:", err)
+			if err := ui.client.ReplayLastFrame(); err != nil {
+				fmt.Println("[Client: UI-cli] Replay error:", err)
 			} else {
 				fmt.Println("[Client] Replay sent.")
 			}
-
 			continue
 		}
 
