@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/gabbla05/KittyProtocol/internal/cryptoee"
 	"github.com/quic-go/quic-go"
 )
 
@@ -64,6 +65,13 @@ func (c *KittyClient) Connect(hubAddr string) error {
 
 // Disconnect closes the QUIC connection and stream.
 func (c *KittyClient) Disconnect() {
+	if c.kEnc != nil {
+		cryptoee.Zeroize(c.kEnc)
+	}
+	if c.kMac != nil {
+		cryptoee.Zeroize(c.kMac)
+	}
+
 	c.Close()
 }
 

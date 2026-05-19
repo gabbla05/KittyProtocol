@@ -13,24 +13,21 @@ const (
 )
 
 // NOTE:
-// For now we assume that Alice and Bob have agreed on a shared secret K_AB
-// out-of-band (OOB). In this prototype we use a static 32-byte value as K_AB.
-// In a real deployment this MUST be replaced with a proper key agreement
-// mechanism (e.g. X25519) and per-conversation secrets.
-// ============================================
-// DO NOT USE THIS STATIC SECRET IN PRODUCTION.
-// ============================================
-// var sharedSecretKAB = []byte("0123456789ABCDEF0123456789ABCDEF") // 32 bytes
-// ============================================================================
+// We assume that Alice and Bob have agreed on a shared secret K_AB
+// through some out-of-band mechanism (e.g., QR code, password, or prior exchange).
+// This secret is then used to derive separate keys for encryption and authentication using HKDF.
 
-// DeriveKeys derives K_enc and K_mac from the static K_AB using HKDF-SHA256.
-// This is a convenience wrapper for the prototype. In a real system you should
-// use DeriveKeysFromSecret with a per-session/per-conversation secret.
-// func DeriveKeys() (kEnc, kMac []byte, err error) {
-// 	return DeriveKeysFromSecret(sharedSecretKAB)
-// }
+// DeriveKeysFromSecret derives K_enc and K_mac from the provided shared secret
+// using HKDF-SHA256.
+//
+// IMPORTANT:
+// - 'secret' MUST already be a high-entropy shared secret K_AB agreed OOB
+//   between the two parties (e.g. 32 random bytes).
+// - This function does NOT perform password hashing. If you want to use
+//   human-memorable passphrases, you MUST first run them through a KDF
+//   suitable for passwords (e.g. Argon2, PBKDF2) and only then call this
+//   function with the resulting key material.
 
-// DeriveKeysFromSecret derives K_enc and K_mac from the provided secret using HKDF-SHA256.
 func DeriveKeysFromSecret(secret []byte) (kEnc, kMac []byte, err error) {
 	hkdfEnc := hkdf.New(sha256.New, secret, nil, []byte("encryption"))
 	hkdfMac := hkdf.New(sha256.New, secret, nil, []byte("authentication"))
