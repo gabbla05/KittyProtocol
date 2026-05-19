@@ -64,10 +64,10 @@ func (c *clientContext) handleData(raw []byte) {
 	}
 	b, err := json.Marshal(ack)
 	if err != nil {
-		fmt.Println("[Hub] Failed to marshal MEOW_OK ACK:", err)
+		fmt.Println("[Hub: Data] Failed to marshal MEOW_OK ACK:", err)
 		return
 	}
 	if _, err := c.stream.Write(b); err != nil {
-		fmt.Println("[Hub] Failed to send MEOW_OK ACK:", err)
+		fmt.Println("[Hub: Data] Failed to send MEOW_OK ACK:", err)
 	}
 }

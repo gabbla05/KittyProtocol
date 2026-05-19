@@ -17,7 +17,7 @@ import (
 func handleClient(conn *quic.Conn) {
 	stream, err := conn.AcceptStream(context.Background())
 	if err != nil {
-		fmt.Println("Stream error:", err)
+		fmt.Println("[Hub: HandlerDispatcher] Stream error:", err)
 		return
 	}
 	defer stream.Close()
@@ -38,8 +38,8 @@ func handleClient(conn *quic.Conn) {
 		}
 
 		raw := buf[:n]
-		fmt.Println("[Hub] STREAM ID:", stream.StreamID())
-		fmt.Println("[Hub] RAW:", string(raw))
+		fmt.Println("[Hub: HandlerDispatcher] STREAM ID:", stream.StreamID())
+		fmt.Println("[Hub: HandlerDispatcher] RAW:", string(raw))
 
 		// Initial validation: extract type and msg_id
 		typeName, _, perr := protocol.GetFrameType(raw)
@@ -48,7 +48,7 @@ func handleClient(conn *quic.Conn) {
 			continue
 		}
 
-		fmt.Println("[Handler] Received frame type:", typeName)
+		fmt.Println("[Hub: HandlerDispatcher] Received frame type:", typeName)
 
 		switch typeName {
 		case "HELLO":
@@ -68,7 +68,7 @@ func handleClient(conn *quic.Conn) {
 
 		case "STATUS_RES":
 			// Hub does not expect STATUS_RES from clients.
-			fmt.Println("[Hub] Unexpected STATUS_RES from client – ignoring")
+			fmt.Println("[Hub: HandlerDispatcher] Unexpected STATUS_RES from client – ignoring")
 
 		case "BYE":
 			ctx.handleBye()

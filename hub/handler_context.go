@@ -26,7 +26,7 @@ type clientContext struct {
 // It removes the session from the SessionManager and stops the AUTH timer.
 func (c *clientContext) cleanup() {
 	if c.session != nil {
-		fmt.Println("[Handler] Cleaning up session for:", c.username)
+		fmt.Println("[Handler: Context] Cleaning up session for:", c.username)
 		globalSessions.Remove(c.username)
 		if c.session.CloseFunc != nil {
 			c.session.CloseFunc()

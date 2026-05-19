@@ -24,11 +24,11 @@ func sendError(stream *quic.Stream, code, desc string) {
 
 	b, err := json.Marshal(errFrame)
 	if err != nil {
-		fmt.Println("[Hub] Failed to marshal ERROR frame:", err)
+		fmt.Println("[Hub: Errors] Failed to marshal ERROR frame:", err)
 		return
 	}
 
 	if _, err := stream.Write(b); err != nil {
-		fmt.Println("[Hub] Failed to send ERROR frame:", err)
+		fmt.Println("[Hub: Errors] Failed to send ERROR frame:", err)
 	}
 }

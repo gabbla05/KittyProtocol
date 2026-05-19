@@ -24,7 +24,7 @@ func handleHELLO(stream *quic.Stream, conn *quic.Conn) *protection.AuthTimer {
 	if b, err := json.Marshal(ok); err == nil {
 		_, _ = stream.Write(b)
 	} else {
-		fmt.Println("[Hub] Failed to send MEOW_OK:", err)
+		fmt.Println("[Hub: AuthFlow] Failed to send MEOW_OK:", err)
 	}
 
 	// Start 20-second AUTH timeout.

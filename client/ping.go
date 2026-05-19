@@ -1,34 +1,55 @@
 package main
 
 import (
-	"encoding/json" // Dodano do obsługi json.Marshal
+	"encoding/json"
 	"time"
 
 	"github.com/gabbla05/KittyProtocol/protocol"
-	"github.com/quic-go/quic-go"
 )
 
-// startPingLoop okresowo wysyła ramki PING, aby podtrzymać sesję (Keep-alive).
-func startPingLoop(stream *quic.Stream) {
+// StartPingLoop launches a background goroutine that sends PING frames
+// every 30 seconds. It stops when stopPing is closed or the stream ends.
+func (c *KittyClient) StartPingLoop() {
+	c.mu.Lock()
+	stream := c.stream
+	stop := c.stopPing
+	c.mu.Unlock()
+
+	if stream == nil {
+		return
+	}
+
 	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+
 		for {
-			// Zgodnie z dokumentacją wysyłamy PING co 30 sekund[cite: 2, 7].
-			time.Sleep(30 * time.Second)
-
-			// TASK 10: Użycie dedykowanej struktury PingFrame zamiast UniversalFrame.
-			ping := protocol.PingFrame{
-				BaseFrame: protocol.BaseFrame{
-					Type:  "PING",
-					MsgID: time.Now().UnixMilli(),
-				},
-			}
-
-			// Serializacja przy użyciu standardowej biblioteki.
-			b, _ := json.Marshal(ping)
-			_, err := stream.Write(b)
-			if err != nil {
-				// Jeśli strumień jest zamknięty, kończymy pętlę.
+			select {
+			case <-stop:
 				return
+
+			case <-ticker.C:
+				c.mu.Lock()
+				s := c.stream
+				c.mu.Unlock()
+
+				if s == nil {
+					return
+				}
+
+				frame := protocol.PingFrame{
+					BaseFrame: protocol.BaseFrame{
+						Type:  "PING",
+						MsgID: time.Now().UnixMilli(),
+					},
+				}
+
+				b, _ := json.Marshal(frame)
+				_, err := s.Write(b)
+				if err != nil {
+					// Stream closed — stop loop
+					return
+				}
 			}
 		}
 	}()

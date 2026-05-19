@@ -63,7 +63,7 @@ func (sm *SessionManager) startCleaner(interval, idleTimeout time.Duration) {
 		sm.mu.Lock()
 		for user, sess := range sm.sessions {
 			if time.Since(sess.LastActive) > idleTimeout {
-				fmt.Printf("[Protection] Idle Timeout: %s. Removing session.\n", user)
+				fmt.Printf("[SessionManager: Protection] Idle Timeout: %s. Removing session.\n", user)
 				if sess.CloseFunc != nil {
 					sess.CloseFunc()
 				}

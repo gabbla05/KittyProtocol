@@ -42,7 +42,7 @@ func routeData(frame protocol.DataFrame, sender *protection.Session, senderStrea
 	}
 
 	if _, err := targetSess.Stream.Write(fb); err != nil {
-		fmt.Println("[Hub] Failed to deliver DATA to receiver:", err)
+		fmt.Println("[Hub: Router] Failed to deliver DATA to receiver:", err)
 		sendError(senderStream, "ERR_10", "Failed to deliver to receiver")
 		return false
 	}

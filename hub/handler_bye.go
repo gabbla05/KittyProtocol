@@ -6,7 +6,7 @@ import "fmt"
 // It removes the session from SessionManager and closes the connection.
 func (c *clientContext) handleBye() {
 	if c.session != nil {
-		fmt.Println("[Handler] Cleaning up session for:", c.username)
+		fmt.Println("[Handler: Bye] Cleaning up session for:", c.username)
 		globalSessions.Remove(c.username)
 		if c.session.CloseFunc != nil {
 			c.session.CloseFunc()

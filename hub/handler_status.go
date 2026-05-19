@@ -40,6 +40,6 @@ func (c *clientContext) handleGetStatus(raw []byte) {
 	}
 
 	if _, err := c.stream.Write(b); err != nil {
-		fmt.Println("[Hub] Failed to send STATUS_RES:", err)
+		fmt.Println("[Hub: HandlerStatus] Failed to send STATUS_RES:", err)
 	}
 }

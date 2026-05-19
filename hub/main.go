@@ -44,7 +44,7 @@ func main() {
 		panic(err)
 	}
 
-	fmt.Println("🐈 KittyProtocol Hub listening on", interceptAddr)
+	fmt.Println("[Hub] 🐈 KittyProtocol Hub listening on", interceptAddr)
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
@@ -58,7 +58,7 @@ func main() {
 	for {
 		conn, err := listener.Accept(context.Background())
 		if err != nil {
-			fmt.Println("Accept error:", err)
+			fmt.Println("[Hub] Accept error:", err)
 			return
 		}
 		go handleClient(conn)
