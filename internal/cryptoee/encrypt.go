@@ -13,43 +13,43 @@ import (
 // EncryptAndMAC encrypts plaintext using AEAD (AES-GCM) and computes HMAC.
 // Returns BASE64(nonce||ciphertext) and BASE64(mac).
 // The HMAC is computed over: cipher || msg_id || target.
-func EncryptAndMAC(msgID int64, target, plaintext string) (string, string, error) {
-	kEnc, kMac, err := DeriveKeys()
-	if err != nil {
-		return "", "", err
-	}
+// func EncryptAndMAC(msgID int64, target, plaintext string) (string, string, error) {
+// 	kEnc, kMac, err := DeriveKeys()
+// 	if err != nil {
+// 		return "", "", err
+// 	}
 
-	block, err := aes.NewCipher(kEnc)
-	if err != nil {
-		return "", "", fmt.Errorf("AES cipher error: %w", err)
-	}
+// 	block, err := aes.NewCipher(kEnc)
+// 	if err != nil {
+// 		return "", "", fmt.Errorf("AES cipher error: %w", err)
+// 	}
 
-	aead, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", "", fmt.Errorf("AEAD error: %w", err)
-	}
+// 	aead, err := cipher.NewGCM(block)
+// 	if err != nil {
+// 		return "", "", fmt.Errorf("AEAD error: %w", err)
+// 	}
 
-	nonceSize := aead.NonceSize()
-	nonce := make([]byte, nonceSize)
+// 	nonceSize := aead.NonceSize()
+// 	nonce := make([]byte, nonceSize)
 
-	// Encode msg_id into last 8 bytes of nonce.
-	// The remaining bytes are zeroed (since make() zero-initializes the slice).
-	binary.BigEndian.PutUint64(nonce[nonceSize-8:], uint64(msgID))
+// 	// Encode msg_id into last 8 bytes of nonce.
+// 	// The remaining bytes are zeroed (since make() zero-initializes the slice).
+// 	binary.BigEndian.PutUint64(nonce[nonceSize-8:], uint64(msgID))
 
-	ciphertext := aead.Seal(nil, nonce, []byte(plaintext), nil)
+// 	ciphertext := aead.Seal(nil, nonce, []byte(plaintext), nil)
 
-	// HMAC(cipher || msg_id || target)
-	macInput := buildMACInput(ciphertext, msgID, target)
-	h := hmac.New(sha256.New, kMac)
-	h.Write(macInput)
-	mac := h.Sum(nil)
+// 	// HMAC(cipher || msg_id || target)
+// 	macInput := buildMACInput(ciphertext, msgID, target)
+// 	h := hmac.New(sha256.New, kMac)
+// 	h.Write(macInput)
+// 	mac := h.Sum(nil)
 
-	// payload = BASE64(nonce||cipher)
-	raw := append(nonce, ciphertext...)
-	return base64.StdEncoding.EncodeToString(raw),
-		base64.StdEncoding.EncodeToString(mac),
-		nil
-}
+// 	// payload = BASE64(nonce||cipher)
+// 	raw := append(nonce, ciphertext...)
+// 	return base64.StdEncoding.EncodeToString(raw),
+// 		base64.StdEncoding.EncodeToString(mac),
+// 		nil
+// }
 
 // buildMACInput = cipher || msg_id || target.
 func buildMACInput(cipher []byte, msgID int64, target string) []byte {
@@ -61,4 +61,33 @@ func buildMACInput(cipher []byte, msgID int64, target string) []byte {
 	out = append(out, msg...)
 	out = append(out, []byte(target)...)
 	return out
+}
+
+// EncryptAndMACWithKeys uses already derived keys K_enc and K_mac from client side.
+func EncryptAndMACWithKeys(msgID int64, target, plaintext string, kEnc, kMac []byte) (string, string, error) {
+	block, err := aes.NewCipher(kEnc)
+	if err != nil {
+		return "", "", fmt.Errorf("[Encrypt]: AES cipher error: %w", err)
+	}
+
+	aead, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", "", fmt.Errorf("[Encrypt]: AEAD error: %w", err)
+	}
+
+	nonceSize := aead.NonceSize()
+	nonce := make([]byte, nonceSize)
+	binary.BigEndian.PutUint64(nonce[nonceSize-8:], uint64(msgID))
+
+	ciphertext := aead.Seal(nil, nonce, []byte(plaintext), nil)
+
+	macInput := buildMACInput(ciphertext, msgID, target)
+	h := hmac.New(sha256.New, kMac)
+	h.Write(macInput)
+	mac := h.Sum(nil)
+
+	raw := append(nonce, ciphertext...)
+	return base64.StdEncoding.EncodeToString(raw),
+		base64.StdEncoding.EncodeToString(mac),
+		nil
 }

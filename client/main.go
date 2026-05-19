@@ -68,6 +68,13 @@ func main() {
 	target := ui.ReadTarget()
 	client.SetTarget(target)
 
+	secret := ui.ReadSharedSecret()
+	if err := client.SetSharedSecret(secret); err != nil {
+		fmt.Println("[Client] Failed to set shared secret:", err)
+		client.Close()
+		return
+	}
+
 	fmt.Println("[Client] Session established with target:", target)
 
 	// Start background loops

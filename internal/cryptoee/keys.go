@@ -20,15 +20,15 @@ const (
 // ============================================
 // DO NOT USE THIS STATIC SECRET IN PRODUCTION.
 // ============================================
-var sharedSecretKAB = []byte("0123456789ABCDEF0123456789ABCDEF") // 32 bytes
+// var sharedSecretKAB = []byte("0123456789ABCDEF0123456789ABCDEF") // 32 bytes
 // ============================================================================
 
 // DeriveKeys derives K_enc and K_mac from the static K_AB using HKDF-SHA256.
 // This is a convenience wrapper for the prototype. In a real system you should
 // use DeriveKeysFromSecret with a per-session/per-conversation secret.
-func DeriveKeys() (kEnc, kMac []byte, err error) {
-	return DeriveKeysFromSecret(sharedSecretKAB)
-}
+// func DeriveKeys() (kEnc, kMac []byte, err error) {
+// 	return DeriveKeysFromSecret(sharedSecretKAB)
+// }
 
 // DeriveKeysFromSecret derives K_enc and K_mac from the provided secret using HKDF-SHA256.
 func DeriveKeysFromSecret(secret []byte) (kEnc, kMac []byte, err error) {

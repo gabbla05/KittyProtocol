@@ -74,6 +74,16 @@ func (c *KittyClient) StartReceiverLoop(disconnected chan struct{}) {
 				}
 
 			case "DATA":
+				c.mu.Lock()
+				kEnc := c.kEnc
+				kMac := c.kMac
+				c.mu.Unlock()
+
+				if kEnc == nil || kMac == nil {
+					fmt.Println("\n[Client] No shared secret set — cannot decrypt.\n> ")
+					continue
+				}
+
 				var df protocol.DataFrame
 				if json.Unmarshal(buf[:n], &df) != nil {
 					fmt.Println("\n[Client: Receive] Failed to parse DATA frame\n> ")
@@ -85,11 +95,13 @@ func (c *KittyClient) StartReceiverLoop(disconnected chan struct{}) {
 					continue
 				}
 
-				plaintext, err := cryptoee.DecryptAndVerify(
+				plaintext, err := cryptoee.DecryptAndVerifyWithKeys(
 					df.MsgID,
 					df.Target,
 					df.Payload,
 					df.MAC,
+					kEnc,
+					kMac,
 				)
 				if err != nil {
 					fmt.Printf("\n[Client: Receive] E2EE error: %v\n> ", err)

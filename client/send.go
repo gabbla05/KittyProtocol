@@ -16,7 +16,13 @@ func (c *KittyClient) SendMessage(text string) error {
 	stream := c.stream
 	target := c.target
 	ackMgr := c.ackMgr
+	kEnc := c.kEnc
+	kMac := c.kMac
 	c.mu.Unlock()
+
+	if kEnc == nil || kMac == nil {
+		return errors.New("shared secret not set")
+	}
 
 	if stream == nil {
 		return errors.New("stream is nil")
@@ -33,7 +39,7 @@ func (c *KittyClient) SendMessage(text string) error {
 	}
 
 	// E2EE encryption
-	payloadB64, macB64, err := cryptoee.EncryptAndMAC(msgID, target, text)
+	payloadB64, macB64, err := cryptoee.EncryptAndMACWithKeys(msgID, target, text, kEnc, kMac)
 	if err != nil {
 		return err
 	}

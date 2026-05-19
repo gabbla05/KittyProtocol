@@ -57,6 +57,19 @@ func (ui *CliUI) ReadTarget() string {
 	}
 }
 
+func (ui *CliUI) ReadSharedSecret() string {
+	for {
+		fmt.Print("Wspólny sekret (K_AB) dla tej rozmowy: ")
+		secret, _ := ui.reader.ReadString('\n')
+		secret = strings.TrimSpace(secret)
+
+		if secret != "" {
+			return secret
+		}
+		fmt.Println("[Client: UI-cli] Sekret nie może być pusty.")
+	}
+}
+
 // RunSendLoop starts the main CLI loop for sending messages.
 func (ui *CliUI) RunSendLoop(disconnected chan struct{}) {
 	for {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/gabbla05/KittyProtocol/internal/cryptoee"
 	"github.com/quic-go/quic-go"
 )
 
@@ -38,7 +39,10 @@ type KittyClient struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
 
-	lastFrame []byte
+	lastFrame []byte //for /replay command test sake
+
+	kEnc []byte
+	kMac []byte
 }
 
 // NewKittyClient creates a new client instance in the Disconnected state.
@@ -116,4 +120,18 @@ func (c *KittyClient) Close() {
 	if c.conn != nil {
 		_ = c.conn.CloseWithError(0, "client closed")
 	}
+}
+
+func (c *KittyClient) SetSharedSecret(secret string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	kEnc, kMac, err := cryptoee.DeriveKeysFromSecret([]byte(secret))
+	if err != nil {
+		return err
+	}
+
+	c.kEnc = kEnc
+	c.kMac = kMac
+	return nil
 }
