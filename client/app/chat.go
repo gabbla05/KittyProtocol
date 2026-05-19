@@ -1,22 +1,47 @@
 package app
 
-// func (app *App) RunChatSession(target string) {
-// 	app.client.SetTarget(target)
+func (a *App) RunChatSession(target string) {
+	a.client.SetTarget(target)
+	a.ui.Printf("Wybrano rozmówcę: %s\n", target)
 
-// 	secret := app.ui.ReadSharedSecret()
-// 	app.client.SetSharedSecret(secret)
+	secret := a.ui.ReadSharedSecret()
+	if err := a.client.SetSharedSecret(secret); err != nil {
+		a.ui.Println("Błąd ustawiania sekretu:", err)
+		return
+	}
 
-// 	for {
-// 		msg := app.ui.ReadLine()
+	a.ui.Println("Sekret ustawiony. Możesz pisać. (/quit aby wrócić do menu, /replay aby wysłać ostatnią ramkę)")
 
-// 		switch {
-// 		case msg == "/quit":
-// 			app.client.SendBye()
-// 			return
-// 		case msg == "/replay":
-// 			app.client.Replay()
-// 		default:
-// 			app.client.SendMessage(msg)
-// 		}
-// 	}
-// }
+	for {
+		// sprawdzamy, czy klient nie został rozłączony
+		select {
+		case <-a.disconnected:
+			a.ui.Println("[Client] Disconnected from server. Leaving chat.")
+			return
+		default:
+		}
+
+		line := a.ui.ReadLine()
+
+		switch line {
+		case "/quit":
+			// kończymy tylko tryb rozmowy, wracamy do menu
+			return
+
+		case "/replay":
+			if err := a.client.ReplayLastFrame(); err != nil {
+				a.ui.Println("Replay error:", err)
+			} else {
+				a.ui.Println("Replay sent.")
+			}
+
+		case "":
+			continue
+
+		default:
+			if err := a.client.SendMessage(line); err != nil {
+				a.ui.Println("Send error:", err)
+			}
+		}
+	}
+}

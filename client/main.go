@@ -5,22 +5,24 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/gabbla05/KittyProtocol/client/api"
+	"github.com/gabbla05/KittyProtocol/client/app"
 )
 
-// Main entry point for the CLI version of the KittyProtocol client.
-// All protocol logic is inside KittyClient.
-// This file only orchestrates the flow.
 func main() {
 	client := api.NewKittyClient()
 	ui := NewCliUI(client)
 
-	// Register UI as ACK event handler
+	// jeden wspólny kanał disconnected
+	disconnected := make(chan struct{})
+
+	application := app.NewApp(client, ui, disconnected)
+
+	// ACK handler
 	client.RegisterAckHandler(ui)
 
-	// Handle OS signals (Ctrl+C, SIGTERM)
+	// sygnały OS
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
 
@@ -32,7 +34,7 @@ func main() {
 		os.Exit(0)
 	}()
 
-	// Connect to Hub
+	// Connect
 	hubAddr := os.Getenv("KITTY_HUB_ADDR")
 	if hubAddr == "" {
 		hubAddr = "127.0.0.1:9999"
@@ -45,14 +47,14 @@ func main() {
 		return
 	}
 
-	// HELLO handshake
+	// HELLO
 	if err := client.WaitForHelloOK(); err != nil {
 		fmt.Println("[Client] HELLO failed:", err)
 		client.Close()
 		return
 	}
 
-	// AUTH phase
+	// AUTH
 	user, pass := ui.ReadCredentials()
 	if err := client.SendAuth(user, pass); err != nil {
 		fmt.Println("[Client] AUTH send error:", err)
@@ -66,28 +68,13 @@ func main() {
 		return
 	}
 
-	// Target selection
-	target := ui.ReadTarget()
-	client.SetTarget(target)
-
-	secret := ui.ReadSharedSecret()
-	if err := client.SetSharedSecret(secret); err != nil {
-		fmt.Println("[Client] Failed to set shared secret:", err)
-		client.Close()
-		return
-	}
-
-	fmt.Println("[Client] Session established with target:", target)
-
-	// Start background loops
-	disconnected := make(chan struct{})
+	// background loops
 	client.StartReceiverLoop(disconnected)
 	client.StartPingLoop()
 
-	// Main send loop (CLI)
-	ui.RunSendLoop(disconnected)
+	// workflow
+	application.RunMainMenu()
 
-	// Cleanup
+	// cleanup
 	client.Close()
-	time.Sleep(200 * time.Millisecond)
 }

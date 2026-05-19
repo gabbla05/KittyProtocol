@@ -2,22 +2,19 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 
 	"github.com/gabbla05/KittyProtocol/client/api"
 )
 
-// CliUI implements AckEventHandler and provides a simple terminal UI.
+// CliUI implements the UI interface used by the App layer.
 type CliUI struct {
 	client *api.KittyClient
 	reader *bufio.Reader
 }
 
-// NewCliUI creates a new CLI wrapper for KittyClient.
 func NewCliUI(c *api.KittyClient) *CliUI {
 	return &CliUI{
 		client: c,
@@ -25,17 +22,24 @@ func NewCliUI(c *api.KittyClient) *CliUI {
 	}
 }
 
-// OnDelivered is called by AckManager when a message is delivered.
-func (ui *CliUI) OnDelivered(msgID int64) {
-	fmt.Printf("\n[Delivered] msg_id=%d\n> ", msgID)
+// --- UI interface methods ---
+
+func (ui *CliUI) ReadLine() string {
+	fmt.Print("> ")
+	line, _ := ui.reader.ReadString('\n')
+	return strings.TrimSpace(line)
 }
 
-// OnTimeout is called by AckManager when a message times out.
-func (ui *CliUI) OnTimeout(msgID int64) {
-	fmt.Printf("\n[Timeout] msg_id=%d not delivered\n> ", msgID)
+func (ui *CliUI) Println(v ...any) {
+	fmt.Println(v...)
 }
 
-// ReadCredentials prompts the user for login and password.
+func (ui *CliUI) Printf(format string, v ...any) {
+	fmt.Printf(format, v...)
+}
+
+// --- Additional helpers used by App ---
+
 func (ui *CliUI) ReadCredentials() (string, string) {
 	fmt.Print("Login: ")
 	user, _ := ui.reader.ReadString('\n')
@@ -44,20 +48,6 @@ func (ui *CliUI) ReadCredentials() (string, string) {
 	pass, _ := ui.reader.ReadString('\n')
 
 	return strings.TrimSpace(user), strings.TrimSpace(pass)
-}
-
-// ReadTarget prompts the user for the chat target.
-func (ui *CliUI) ReadTarget() string {
-	for {
-		fmt.Print("Do kogo piszesz?: ")
-		target, _ := ui.reader.ReadString('\n')
-		target = strings.TrimSpace(target)
-
-		if target != "" {
-			return target
-		}
-		fmt.Println("[Client: UI-cli] Target cannot be empty.")
-	}
 }
 
 func (ui *CliUI) ReadSharedSecret() []byte {
@@ -73,113 +63,12 @@ func (ui *CliUI) ReadSharedSecret() []byte {
 	}
 }
 
-// RunSendLoop starts the main CLI loop for sending messages.
-func (ui *CliUI) RunSendLoop(disconnected chan struct{}) {
-	for {
-		select {
-		case <-disconnected:
-			fmt.Println("[Client: UI-cli] Session closed. Returning to disconnected state.")
-			return
+// --- ACK event handlers ---
 
-		default:
-		}
+func (ui *CliUI) OnDelivered(msgID int64) {
+	fmt.Printf("\n[Delivered] msg_id=%d\n> ", msgID)
+}
 
-		fmt.Print("> ")
-		text, err := ui.reader.ReadString('\n')
-		if err != nil {
-			if err == io.EOF {
-				fmt.Println("\n[Client: UI-cli] EOF detected. Sending BYE and exiting.")
-				_ = ui.client.SendBye()
-				ui.client.Close()
-				return
-			}
-			fmt.Println("[Client: UI-cli] Read error:", err)
-			continue
-		}
-
-		text = strings.TrimSpace(text)
-		if text == "" {
-			continue
-		}
-
-		// Local commands
-		if text == "/quit" {
-			_ = ui.client.SendBye()
-			ui.client.Close()
-			fmt.Println("[Client: UI-cli] Closing session by user request.")
-			return
-		}
-
-		if after, ok := strings.CutPrefix(text, "/setkey "); ok {
-			secret := strings.TrimSpace(after)
-			if secret == "" {
-				fmt.Println("[Client: UI-cli] Usage: /setkey <secret>")
-				continue
-			}
-			if err := ui.client.SetSharedSecret([]byte(secret)); err != nil {
-				fmt.Println("[Client: UI-cli] Failed to set shared secret:", err)
-			} else {
-				fmt.Println("[Client: UI-cli] Shared secret set.")
-			}
-			continue
-		}
-
-		if after, ok := strings.CutPrefix(text, "/loadkey "); ok {
-			path := strings.TrimSpace(after)
-			if path == "" {
-				fmt.Println("[Client: UI-cli] Usage: /loadkey <path>")
-				continue
-			}
-			data, err := os.ReadFile(path)
-			if err != nil {
-				fmt.Println("[Client: UI-cli] Failed to read key file:", err)
-				continue
-			}
-			data = bytes.TrimSpace(data)
-			if len(data) == 0 {
-				fmt.Println("[Client: UI-cli] Key file is empty.")
-				continue
-			}
-			if err := ui.client.SetSharedSecret(data); err != nil {
-				fmt.Println("[Client: UI-cli] Failed to set shared secret from file:", err)
-			} else {
-				fmt.Println("[Client: UI-cli] Shared secret loaded from file.")
-			}
-			continue
-		}
-
-		if after, ok := strings.CutPrefix(text, "/status "); ok {
-			target := strings.TrimSpace(after)
-			if target == "" {
-				fmt.Println("[Client: UI-cli] Usage: /status <user>")
-				continue
-			}
-			_ = ui.client.SendGetStatus(target)
-			continue
-		}
-
-		if text == "/replay" {
-			if err := ui.client.ReplayLastFrame(); err != nil {
-				fmt.Println("[Client: UI-cli] Replay error:", err)
-			} else {
-				fmt.Println("[Client] Replay sent.")
-			}
-			continue
-		}
-
-		// Normal message
-		const MaxMessageLen = 2000
-
-		// Truncate if too long
-		if len(text) > MaxMessageLen {
-			fmt.Printf("[Client] Message too long (%d chars). Truncated to %d.\n",
-				len(text), MaxMessageLen)
-			text = text[:MaxMessageLen]
-		}
-
-		if err := ui.client.SendMessage(text); err != nil {
-			fmt.Println("[Client: UI-cli] Send error:", err)
-		}
-
-	}
+func (ui *CliUI) OnTimeout(msgID int64) {
+	fmt.Printf("\n[Timeout] msg_id=%d not delivered\n> ", msgID)
 }
