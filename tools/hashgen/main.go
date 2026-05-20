@@ -7,6 +7,7 @@ import (
 )
 
 func main() {
+	// passes for users:   alice,    bob,        charlie
 	passwords := []string{"secret", "password", "private"}
 
 	for _, p := range passwords {
