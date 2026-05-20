@@ -27,6 +27,14 @@ func (c *KittyClient) Connect(hubAddr string) error {
 	// Ensure clean state if reconnecting
 	c.Close()
 
+	// Recreate control channels for background loops.
+	// Close() closes stopPing/stopRecv; they must be reinitialized
+	// before starting new receiver/ping goroutines.
+	c.mu.Lock()
+	c.stopPing = make(chan struct{})
+	c.stopRecv = make(chan struct{})
+	c.mu.Unlock()
+
 	tlsConf := buildTLSConfig()
 
 	// QUIC Dial
