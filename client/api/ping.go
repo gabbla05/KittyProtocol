@@ -7,8 +7,16 @@ import (
 	"github.com/gabbla05/KittyProtocol/protocol"
 )
 
-// StartPingLoop launches a background goroutine that sends PING frames
-// every 30 seconds. It stops when stopPing is closed or the stream ends.
+// StartPingLoop starts a background goroutine that periodically sends
+// PING frames to keep the KittyProtocol session active.
+//
+// Although QUIC has its own keep-alive mechanisms, the Hub expects
+// application-level PING frames to detect idle clients.
+//
+// The loop terminates when:
+//   - stopPing channel is closed,
+//   - the underlying QUIC stream becomes nil,
+//   - writing to the stream returns an error.
 func (c *KittyClient) StartPingLoop() {
 	c.mu.Lock()
 	stream := c.stream
@@ -44,10 +52,14 @@ func (c *KittyClient) StartPingLoop() {
 					},
 				}
 
-				b, _ := json.Marshal(frame)
-				_, err := s.Write(b)
+				b, err := json.Marshal(frame)
 				if err != nil {
-					// Stream closed — stop loop
+					// Serialization failure — stop ping loop.
+					return
+				}
+
+				if _, err := s.Write(b); err != nil {
+					// Stream closed or write error — stop ping loop.
 					return
 				}
 			}

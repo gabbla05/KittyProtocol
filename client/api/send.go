@@ -9,8 +9,14 @@ import (
 	"github.com/gabbla05/KittyProtocol/protocol"
 )
 
-// SendMessage encrypts the plaintext, registers ACK tracking,
-// and sends a DATA frame to the Hub.
+// SendMessage encrypts the plaintext using the current shared secret,
+// registers the message for ACK tracking (MEOW_OK), and sends a DATA frame
+// to the Hub.
+//
+// Requirements:
+//   - shared secret must be set (kEnc, kMac != nil),
+//   - target must be set,
+//   - stream must be non‑nil.
 func (c *KittyClient) SendMessage(text string) error {
 	c.mu.Lock()
 	stream := c.stream
@@ -23,7 +29,6 @@ func (c *KittyClient) SendMessage(text string) error {
 	if kEnc == nil || kMac == nil {
 		return errors.New("shared secret not set")
 	}
-
 	if stream == nil {
 		return errors.New("stream is nil")
 	}
@@ -59,13 +64,12 @@ func (c *KittyClient) SendMessage(text string) error {
 		return err
 	}
 
-	// --- message sending ---
-	_, err = stream.Write(b)
-	if err != nil {
+	// Send frame
+	if _, err := stream.Write(b); err != nil {
 		return err
 	}
 
-	// --- remember last frame (for /replay) ---
+	// Remember last frame for replay testing (CLI /replay command only).
 	c.mu.Lock()
 	c.lastFrame = b
 	c.mu.Unlock()
@@ -74,6 +78,7 @@ func (c *KittyClient) SendMessage(text string) error {
 }
 
 // SendGetStatus sends a GET_STATUS frame for a given user.
+// This is a simple presence query; it is not encrypted.
 func (c *KittyClient) SendGetStatus(target string) error {
 	c.mu.Lock()
 	stream := c.stream
@@ -102,7 +107,7 @@ func (c *KittyClient) SendGetStatus(target string) error {
 	return err
 }
 
-// SendBye sends a BYE frame and does NOT close the stream.
+// SendBye sends a BYE frame to the Hub and does NOT close the stream.
 // Stream closing is handled by KittyClient.Close().
 func (c *KittyClient) SendBye() error {
 	c.mu.Lock()

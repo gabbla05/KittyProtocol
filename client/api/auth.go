@@ -8,7 +8,17 @@ import (
 	"github.com/gabbla05/KittyProtocol/protocol"
 )
 
-// SendAuth sends the AUTH frame with username and password.
+// SendAuth sends an AUTH frame with username and password to the Hub.
+//
+// SECURITY:
+//   - Credentials are transmitted inside a TLS 1.3 encrypted QUIC stream.
+//   - The Hub validates credentials and responds with MEOW_OK or ERROR.
+//
+// PROTOCOL ORDER:
+//  1. SendHello()
+//  2. WaitForHelloOK()
+//  3. SendAuth()
+//  4. WaitForAuthOK()
 func (c *KittyClient) SendAuth(user, pass string) error {
 	c.mu.Lock()
 	stream := c.stream
@@ -38,6 +48,10 @@ func (c *KittyClient) SendAuth(user, pass string) error {
 
 // waitAuthOK waits for MEOW_OK or ERROR after AUTH.
 // Returns (success, errorCode).
+//
+// BLOCKING BEHAVIOR:
+//   - This call blocks until the Hub responds or the stream errors.
+//   - QUIC idle timeout ensures this does not block indefinitely.
 func (c *KittyClient) waitAuthOK() (bool, string) {
 	c.mu.Lock()
 	stream := c.stream

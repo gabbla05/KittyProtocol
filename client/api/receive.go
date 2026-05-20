@@ -8,12 +8,20 @@ import (
 	"github.com/gabbla05/KittyProtocol/protocol"
 )
 
-// StartReceiverLoop starts a background goroutine that reads frames from the stream
-// and handles MEOW_OK, ERROR, DATA and STATUS_RES.
-// It stops when:
-// - the stream is closed,
-// - the disconnected channel is closed,
-// - stopRecv is closed via client.Close().
+// StartReceiverLoop starts a background goroutine that continuously reads
+// frames from the QUIC stream. This is the only reader for the stream;
+// all other components must communicate via higher-level APIs.
+// It handles:
+//
+//   - MEOW_OK      → delivery acknowledgments,
+//   - ERROR        → server‑side errors,
+//   - DATA         → encrypted application messages,
+//   - STATUS_RES   → presence responses.
+//
+// The loop terminates when:
+//   - stopRecv is closed via KittyClient.Close(),
+//   - reading from the stream returns an error,
+//   - the disconnected channel is closed (it is then closed here exactly once).
 func (c *KittyClient) StartReceiverLoop(disconnected chan struct{}) {
 	c.mu.Lock()
 	stream := c.stream
@@ -41,8 +49,10 @@ func (c *KittyClient) StartReceiverLoop(disconnected chan struct{}) {
 				fmt.Println("\n[Client: Receive] Connection closed by server:", err)
 				fmt.Println("[Client: Receive] Returning to disconnected state.")
 
+				// signal application layer exactly once
 				select {
 				case <-disconnected:
+					// already closed
 				default:
 					close(disconnected)
 				}
@@ -57,7 +67,8 @@ func (c *KittyClient) StartReceiverLoop(disconnected chan struct{}) {
 
 			switch typeName {
 			case "MEOW_OK":
-				// Delivery acknowledgment
+				// Delivery acknowledgment (optional).
+				// If no AckManager is configured, this is silently ignored.
 				if ackMgr != nil {
 					ackMgr.NotifyDelivered(msgID)
 				}
@@ -90,14 +101,14 @@ func (c *KittyClient) StartReceiverLoop(disconnected chan struct{}) {
 					continue
 				}
 
-				// Client-side replay protection (silent drop)
+				// Client‑side replay protection (silent drop)
 				if replay != nil && replay.MarkAndCheck(df.MsgID) {
 					continue
 				}
 
 				plaintext, err := cryptoee.DecryptAndVerifyWithKeys(
 					df.MsgID,
-					df.Target,
+					df.Target, // associated data: logical target of the message
 					df.Payload,
 					df.MAC,
 					kEnc,

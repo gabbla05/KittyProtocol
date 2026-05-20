@@ -9,37 +9,49 @@ import (
 	"os"
 )
 
-// buildTLSConfig returns a minimal TLS 1.3 configuration.
-// Certificate verification is handled manually via TOFU.
+// buildTLSConfig returns a minimal TLS 1.3 configuration for QUIC.
+// Certificate verification is intentionally disabled (InsecureSkipVerify)
+// because KittyClient performs TOFU (Trust On First Use) manually.
+//
+// SECURITY MODEL:
+//   - First connection: the server certificate is stored locally.
+//   - Subsequent connections: the certificate must match the stored one.
+//   - Any mismatch is treated as a potential MITM attack.
 func buildTLSConfig() *tls.Config {
 	return &tls.Config{
-		InsecureSkipVerify: true, // TOFU: we verify manually
+		InsecureSkipVerify: true, // TOFU: manual verification
 		NextProtos:         []string{"kitty-quic-v1"},
 		MinVersion:         tls.VersionTLS13,
 	}
 }
 
-// verifyOrStoreServerCert performs TOFU:
-// - if no pinned cert exists → store serverCert.Raw
-// - if pinned cert exists → compare DER bytes
+// verifyOrStoreServerCert performs TOFU certificate pinning.
+//
+// STORAGE:
+//   - The pinned certificate is stored as PEM at "certs/trusted_cert.pem"
+//     relative to the current working directory.
+//
+// BEHAVIOR:
+//   - If no pinned certificate exists → store the presented certificate.
+//   - If a pinned certificate exists → compare DER bytes.
+//   - Any mismatch results in an error (possible MITM).
 func verifyOrStoreServerCert(cert *x509.Certificate) error {
 	if cert == nil {
 		return errors.New("no server certificate presented")
 	}
 
 	serverDER := cert.Raw
+	pinnedPath := "certs/trusted_cert.pem"
 
-	// First connection → store pinned cert
-	if _, err := os.Stat("certs/trusted_cert.pem"); os.IsNotExist(err) {
+	if _, err := os.Stat(pinnedPath); os.IsNotExist(err) {
 		pemData := pem.EncodeToMemory(&pem.Block{
 			Type:  "CERTIFICATE",
 			Bytes: serverDER,
 		})
-		return os.WriteFile("certs/trusted_cert.pem", pemData, 0644)
+		return os.WriteFile(pinnedPath, pemData, 0644)
 	}
 
-	// Compare with pinned cert
-	trustedPEM, err := os.ReadFile("certs/trusted_cert.pem")
+	trustedPEM, err := os.ReadFile(pinnedPath)
 	if err != nil {
 		return err
 	}

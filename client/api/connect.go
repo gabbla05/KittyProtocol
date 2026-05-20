@@ -4,20 +4,28 @@ import (
 	"context"
 	"errors"
 
+	"github.com/gabbla05/KittyProtocol/internal/protection"
 	"github.com/quic-go/quic-go"
 )
 
-// Connect establishes a QUIC connection to the Hub and opens a bidirectional stream.
-// It performs:
-// - TLS 1.3 setup
-// - QUIC Dial
-// - TOFU certificate verification
-// - opening a stream
-// - sending HELLO
+// Connect establishes a fresh QUIC connection to the Hub and opens a bidirectional stream.
+//
+// BEHAVIOR:
+//   - If the client was previously connected, Connect() implicitly closes the old connection.
+//   - Performs TLS 1.3 setup, QUIC dial, TOFU certificate verification, and stream opening.
+//   - Sends the HELLO frame immediately after the stream is opened.
+//   - Does NOT start receiver or ping loops — the caller must start them manually.
+//
+// STATE TRANSITIONS:
+//
+//	StateDisconnected → StateHandshaking
 func (c *KittyClient) Connect(hubAddr string) error {
 	if hubAddr == "" {
 		return errors.New("hub address is empty")
 	}
+
+	// Ensure clean state if reconnecting
+	c.Close()
 
 	tlsConf := buildTLSConfig()
 
@@ -51,6 +59,12 @@ func (c *KittyClient) Connect(hubAddr string) error {
 	c.mu.Lock()
 	c.conn = conn
 	c.stream = stream
+
+	// Reset session‑level state
+	c.target = ""
+	c.lastFrame = nil
+	c.replay = protection.NewReplayDetector()
+	c.ackMgr = NewAckManager()
 	c.mu.Unlock()
 
 	// Send HELLO immediately
@@ -63,12 +77,12 @@ func (c *KittyClient) Connect(hubAddr string) error {
 }
 
 // Disconnect closes the QUIC connection and stream.
+// This is a convenience wrapper around KittyClient.Close().
 func (c *KittyClient) Disconnect() {
-
 	c.Close()
 }
 
-// WaitForHelloOK waits for MEOW_OK after HELLO.
+// WaitForHelloOK waits for MEOW_OK after HELLO and transitions to StateAuthenticating.
 func (c *KittyClient) WaitForHelloOK() error {
 	ok, code := c.waitHelloOK()
 	if ok {
@@ -78,7 +92,7 @@ func (c *KittyClient) WaitForHelloOK() error {
 	return errors.New(code)
 }
 
-// WaitForAuthOK waits for MEOW_OK after AUTH.
+// WaitForAuthOK waits for MEOW_OK after AUTH and transitions to StateSelectingTarget.
 func (c *KittyClient) WaitForAuthOK() error {
 	ok, code := c.waitAuthOK()
 	if ok {

@@ -8,7 +8,9 @@ import (
 	"github.com/gabbla05/KittyProtocol/protocol"
 )
 
-// SendHello sends the HELLO frame to the Hub.
+// SendHello sends the initial HELLO frame to the Hub.
+// This is the first step of the KittyProtocol handshake and must be
+// called immediately after establishing the QUIC stream.
 func (c *KittyClient) SendHello() error {
 	c.mu.Lock()
 	stream := c.stream
@@ -36,6 +38,14 @@ func (c *KittyClient) SendHello() error {
 
 // waitHelloOK waits for MEOW_OK or ERROR after HELLO.
 // Returns (success, errorCode).
+//
+// BLOCKING BEHAVIOR:
+//   - This call blocks until the Hub responds or the stream errors.
+//   - It does not enforce a timeout; QUIC idle timeout applies.
+//
+// PROTOCOL:
+//   - Expected responses: MEOW_OK or ERROR.
+//   - Any other frame type is treated as UNKNOWN_FRAME.
 func (c *KittyClient) waitHelloOK() (bool, string) {
 	c.mu.Lock()
 	stream := c.stream

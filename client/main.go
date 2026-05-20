@@ -8,11 +8,12 @@ import (
 
 	"github.com/gabbla05/KittyProtocol/client/api"
 	"github.com/gabbla05/KittyProtocol/client/app"
+	"github.com/gabbla05/KittyProtocol/client/ui_cli"
 )
 
 func main() {
 	client := api.NewKittyClient()
-	ui := NewCliUI(client)
+	ui := ui_cli.NewCliUI(client)
 
 	// jeden wspólny kanał disconnected
 	disconnected := make(chan struct{})
