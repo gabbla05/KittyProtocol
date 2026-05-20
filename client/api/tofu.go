@@ -1,29 +1,23 @@
+// tofu.go
+// Implements Trust-On-First-Use (TOFU) certificate pinning for KittyClient.
+// This is an application-level trust mechanism independent of TLS transport.
+
 package api
 
 import (
 	"bytes"
-	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
 	"os"
+	"path/filepath"
 )
 
-// buildTLSConfig returns a minimal TLS 1.3 configuration for QUIC.
-// Certificate verification is intentionally disabled (InsecureSkipVerify)
-// because KittyClient performs TOFU (Trust On First Use) manually.
-//
-// SECURITY MODEL:
-//   - First connection: the server certificate is stored locally.
-//   - Subsequent connections: the certificate must match the stored one.
-//   - Any mismatch is treated as a potential MITM attack.
-func buildTLSConfig() *tls.Config {
-	return &tls.Config{
-		InsecureSkipVerify: true, // TOFU: manual verification
-		NextProtos:         []string{"kitty-quic-v1"},
-		MinVersion:         tls.VersionTLS13,
-	}
-}
+const (
+	// pinnedCertDir is the directory where the pinned certificate is stored.
+	pinnedCertDir  = "certs"
+	pinnedCertFile = "trusted_cert.pem"
+)
 
 // verifyOrStoreServerCert performs TOFU certificate pinning.
 //
@@ -41,16 +35,24 @@ func verifyOrStoreServerCert(cert *x509.Certificate) error {
 	}
 
 	serverDER := cert.Raw
-	pinnedPath := "certs/trusted_cert.pem"
+	pinnedPath := filepath.Join(pinnedCertDir, pinnedCertFile)
 
+	// First run: no pinned certificate → store current one.
 	if _, err := os.Stat(pinnedPath); os.IsNotExist(err) {
+		if err := os.MkdirAll(pinnedCertDir, 0o755); err != nil {
+			return err
+		}
+
 		pemData := pem.EncodeToMemory(&pem.Block{
 			Type:  "CERTIFICATE",
 			Bytes: serverDER,
 		})
-		return os.WriteFile(pinnedPath, pemData, 0644)
+
+		// 0600: only current user can read/write pinned cert.
+		return os.WriteFile(pinnedPath, pemData, 0o600)
 	}
 
+	// Subsequent runs: compare with pinned certificate.
 	trustedPEM, err := os.ReadFile(pinnedPath)
 	if err != nil {
 		return err

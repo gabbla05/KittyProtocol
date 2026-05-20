@@ -2,7 +2,7 @@
 - nawiązani epołączenia pomiędzy użytkownikami już jest po stronie aplikacji !!
 - przy prezentowaniu gotowego projektu można pokazać że na warstwie protokołu działa operacja /replay która symuluje ten atak
 - TESTY DO NOWEGO CRYPTOEE_TEST
-- REFACTOR CLIENTA NA MNIEJSZE MODUŁY!
+- REFACTOR CLIENTA NA MNIEJSZE MODUŁY! -> git
 - TESTY OGÓLNIE
 - KLUCZ Z PLIKU!
 - merge

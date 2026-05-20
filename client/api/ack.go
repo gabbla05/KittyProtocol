@@ -5,24 +5,23 @@ import (
 	"time"
 )
 
-// AckEventHandler defines callbacks for ACK events.
-// UI layers (CLI, GUI) can subscribe to receive delivery notifications.
+// AckEventHandler defines callbacks for delivery acknowledgment events.
+// UI layers (CLI, GUI) or application components may subscribe to receive
+// notifications about message delivery or timeout.
 //
 // CONTRACT:
 //   - OnDelivered(msgID) is called exactly once when MEOW_OK arrives.
 //   - OnTimeout(msgID) is called exactly once when the timeout expires.
 //   - A message will NEVER trigger both events.
+//   - Handlers are invoked synchronously in the caller goroutine.
 type AckEventHandler interface {
 	OnDelivered(msgID int64)
 	OnTimeout(msgID int64)
 }
 
-// AckManager tracks pending messages and their timers.
-// Each message ID has a timeout goroutine that fires if MEOW_OK is not received.
-//
-// LIFECYCLE:
-//   - Created once in NewKittyClient().
-//   - Reset implicitly when KittyClient.Close() is called (pending entries are dropped).
+// AckManager tracks pending messages and their timeout goroutines.
+// Each pending message has a dedicated channel that is closed when MEOW_OK
+// arrives. If the timeout fires first, OnTimeout is invoked.
 //
 // THREAD SAFETY:
 //   - All operations are protected by a mutex.
@@ -97,5 +96,16 @@ func (a *AckManager) NotifyDelivered(msgID int64) {
 		for _, h := range a.handlers {
 			h.OnDelivered(msgID)
 		}
+	}
+}
+
+// RegisterAckHandler is the public API exposed by KittyClient.
+// It simply forwards the handler to the underlying AckManager.
+func (c *KittyClient) RegisterAckHandler(h AckEventHandler) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.ackMgr != nil {
+		c.ackMgr.RegisterHandler(h)
 	}
 }

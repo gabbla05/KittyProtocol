@@ -1,4 +1,8 @@
-package clientutils
+package app
+
+// truncate.go
+// Application-level helper for enforcing plaintext size limits
+// before encryption and transmission.
 
 // MaxPlaintextSize is a conservative limit for plaintext message length.
 // It is chosen to stay safely below the encrypted payload limit after AEAD overhead.
