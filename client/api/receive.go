@@ -123,11 +123,17 @@ func (c *KittyClient) StartReceiverLoop(disconnected chan struct{}) {
 
 			case "STATUS_RES":
 				var sf protocol.StatusResFrame
-				if json.Unmarshal(buf[:n], &sf) == nil {
-					fmt.Printf("\n[Client: Receive] %s is %s\n> ", sf.Target, sf.Status)
-				} else {
+				if json.Unmarshal(buf[:n], &sf) != nil {
 					fmt.Println("\n[Client: Receive] Failed to parse STATUS_RES frame\n> ")
+					continue
 				}
+
+				if sf.Target == "" && sf.Status == "no_target" {
+					fmt.Printf("\n[Client: Receive] Chat ended. No active target.\n> ")
+					continue
+				}
+
+				fmt.Printf("\n[Client: Receive] %s is %s\n> ", sf.Target, sf.Status)
 			}
 		}
 	}()

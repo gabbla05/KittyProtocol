@@ -33,13 +33,11 @@ func (a *App) RunChatSession(target string) {
 
 		case "/quit":
 			// 1. Send to the hub information about the end of conversation
-			_ = a.client.SendGetStatus("") // target = "" means ther e is no receiver
+			_ = a.client.SendGetStatus("") // target = "" means there is no receiver
 
 			// 2. Clean up target locally
 			a.client.SetTarget("")
 
-			// 3. Exit to menu
-			a.printMenu()
 			return
 
 		case "/replay":

@@ -167,9 +167,15 @@ func ParseGetStatusFrame(data []byte) (*GetStatusFrame, error) {
 	if err := json.Unmarshal(data, &f); err != nil {
 		return nil, fmt.Errorf("%s: Invalid JSON format", ErrCodeInvalidFrame)
 	}
-	if f.Target == "" {
-		return nil, fmt.Errorf("%s: Missing target in GET_STATUS frame", ErrCodeInvalidFrame)
-	}
+	
+	// NOTE: Empty target is temporarily allowed because the client uses
+	// GET_STATUS "" to signal "no active chat partner" on /quit.
+	// Once application‑level CHAT_END frames are implemented,
+	// this validation should be re‑enabled.
+	
+	// if f.Target == "" {
+	// 	return nil, fmt.Errorf("%s: Missing target in GET_STATUS frame", ErrCodeInvalidFrame)
+	// }
 	return &f, nil
 }
 
