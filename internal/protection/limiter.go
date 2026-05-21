@@ -48,15 +48,19 @@ func (rl *RateLimiter) Allow() bool {
 	return false
 }
 
-// AuthTimer wraps a time.Timer used for the 20-second AUTH timeout.
+// AuthTimer wraps a time.Timer used for the AUTH timeout.
 type AuthTimer struct {
 	timer *time.Timer
 }
 
-// StartAuthTimer starts a 20-second timer that calls onTimeout when it fires.
+// DefaultAuthTimeout defines how long the client has to complete AUTH
+// before the Hub closes the connection.
+const DefaultAuthTimeout = 20 * time.Second
+
+// StartAuthTimer starts an AUTH timeout timer that calls onTimeout when it fires.
 func StartAuthTimer(onTimeout func()) *AuthTimer {
 	return &AuthTimer{
-		timer: time.AfterFunc(20*time.Second, onTimeout),
+		timer: time.AfterFunc(DefaultAuthTimeout, onTimeout),
 	}
 }
 

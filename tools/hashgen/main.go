@@ -6,8 +6,8 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// This utility generates bcrypt hashes for the passwords "secret" and "password". Can be delted after use.
 func main() {
+	// passes for users:   alice,    bob,        charlie
 	passwords := []string{"secret", "password", "private"}
 
 	for _, p := range passwords {

@@ -7,22 +7,33 @@ import (
 	"golang.org/x/crypto/hkdf"
 )
 
+// Key sizes used for both encryption and MAC keys.
+const (
+	KeySizeBytes = 32
+)
+
 // NOTE:
-// For now we assume that Alice and Bob have agreed on a shared secret K_AB
-// out-of-band (OOB). In this prototype we use a static 32-byte value as K_AB.
-// In a real deployment this must be replaced with a proper key agreement
-// mechanism and per-conversation secrets.
-// ==========================================================================
-var sharedSecretKAB = []byte("0123456789ABCDEF0123456789ABCDEF") // 32 bytes
-// ==========================================================================
+// We assume that Alice and Bob have agreed on a shared secret K_AB
+// through some out-of-band mechanism (e.g., QR code, password, or prior exchange).
+// This secret is then used to derive separate keys for encryption and authentication using HKDF.
 
-// DeriveKeys derives K_enc and K_mac from K_AB using HKDF-SHA256.
-func DeriveKeys() (kEnc, kMac []byte, err error) {
-	hkdfEnc := hkdf.New(sha256.New, sharedSecretKAB, nil, []byte("encryption"))
-	hkdfMac := hkdf.New(sha256.New, sharedSecretKAB, nil, []byte("authentication"))
+// DeriveKeysFromSecret derives K_enc and K_mac from the provided shared secret
+// using HKDF-SHA256.
+//
+// IMPORTANT:
+// - 'secret' MUST already be a high-entropy shared secret K_AB agreed OOB
+//   between the two parties (e.g. 32 random bytes).
+// - This function does NOT perform password hashing. If you want to use
+//   human-memorable passphrases, you MUST first run them through a KDF
+//   suitable for passwords (e.g. Argon2, PBKDF2) and only then call this
+//   function with the resulting key material.
 
-	kEnc = make([]byte, 32)
-	kMac = make([]byte, 32)
+func DeriveKeysFromSecret(secret []byte) (kEnc, kMac []byte, err error) {
+	hkdfEnc := hkdf.New(sha256.New, secret, nil, []byte("encryption"))
+	hkdfMac := hkdf.New(sha256.New, secret, nil, []byte("authentication"))
+
+	kEnc = make([]byte, KeySizeBytes)
+	kMac = make([]byte, KeySizeBytes)
 
 	if _, err = io.ReadFull(hkdfEnc, kEnc); err != nil {
 		return nil, nil, err

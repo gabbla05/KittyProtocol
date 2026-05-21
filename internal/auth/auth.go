@@ -6,17 +6,35 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-var mockUsers = map[string]string{
-	"alice": "$2a$10$75AE7Wefqtm/ezWhCP3YR.vooaYVcv6nK/Drn4pK.YH0BbSB.JRPa",
-	// Skopiowaliśmy hash od Alice, teraz Bob też ma hasło "secret"
-	"bob":     "$2a$10$75AE7Wefqtm/ezWhCP3YR.vooaYVcv6nK/Drn4pK.YH0BbSB.JRPa",
-	"charlie": "$2a$10$E1bp02NhmgFw2DR0.l1YruHEbETPvri1nGqBTjY4c9/aLPxrm0Uty",
+// AuthProvider defines the interface for authentication backends.
+// This allows swapping mock auth for a real database implementation.
+type AuthProvider interface {
+	CheckCredentials(user, pass string) bool
 }
 
-func CheckCredentials(user, pass string) bool {
-	fmt.Printf("[AUTH] user=%q pass=%q\n", user, pass)
+// MockAuth is a simple in-memory authentication provider.
+// Intended ONLY for development and testing.
+type MockAuth struct {
+	users map[string]string // username -> bcrypt hash
+}
 
-	hash, exists := mockUsers[user]
+// NewMockAuth creates a mock authentication provider with predefined users.
+func NewMockAuth() *MockAuth {
+	return &MockAuth{
+		users: map[string]string{
+			"alice":   "$2a$10$75AE7Wefqtm/ezWhCP3YR.vooaYVcv6nK/Drn4pK.YH0BbSB.JRPa",
+			"bob":     "$2a$10$Cxbp6cMDR5S.xNR90lcbSuljSiMEhnCgTF1UWfYGb5VyqSQUVjVri",
+			"charlie": "$2a$10$E1bp02NhmgFw2DR0.l1YruHEbETPvri1nGqBTjY4c9/aLPxrm0Uty",
+		},
+	}
+}
+
+// CheckCredentials verifies username and password using bcrypt.
+// NOTE: Passwords are NEVER logged for security reasons.
+func (m *MockAuth) CheckCredentials(user, pass string) bool {
+	fmt.Printf("[AUTH] user=%q\n", user)
+
+	hash, exists := m.users[user]
 	if !exists {
 		fmt.Println("[AUTH] user not found")
 		return false
@@ -24,12 +42,10 @@ func CheckCredentials(user, pass string) bool {
 
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(pass))
 	if err != nil {
-		fmt.Println("[AUTH] bcrypt error:", err)
+		fmt.Println("[AUTH] invalid password")
 		return false
 	}
 
 	fmt.Println("[AUTH] success")
 	return true
 }
-
-/* Idle Timeout (60s): Mechanizm, który monitoruje każdą sesję. Jeśli przez 60 sekund od klienta nie nadejdzie żadna ramka DATA ani PING, Hub musi jednostronnie zamknąć to połączenie.Rate Limiting (Token Bucket): Musisz zaimplementować faktyczną logikę ograniczania ruchu (10 wiadomości na sekundę na użytkownika / 100 na minutę z IP). Sam komentarz TODO nie obroni serwera przed spamem.Czyszczenie mapy activeSessions: Musisz dopilnować, by w przypadku jakiegokolwiek błędu lub timeoutu, użytkownik był usuwany z mapy w RAM, żeby nie wyciekała pamięć. */

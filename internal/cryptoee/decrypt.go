@@ -9,13 +9,12 @@ import (
 	"fmt"
 )
 
-// DecryptAndVerify verifies HMAC and decrypts BASE64(nonce||cipher).
-func DecryptAndVerify(msgID int64, target, payloadB64, macB64 string) (string, error) {
-	kEnc, kMac, err := DeriveKeys()
-	if err != nil {
-		return "", err
-	}
+// DecryptAndVerifyWithKeys verifies HMAC(cipher || msg_id || target) and
+// decrypts BASE64(nonce||cipher) using AES-GCM.
+//
+// Returns plaintext if both HMAC and decryption succeed.
 
+func DecryptAndVerifyWithKeys(msgID int64, target, payloadB64, macB64 string, kEnc, kMac []byte) (string, error) {
 	raw, err := base64.StdEncoding.DecodeString(payloadB64)
 	if err != nil {
 		return "", fmt.Errorf("payload decode error: %w", err)
@@ -44,7 +43,6 @@ func DecryptAndVerify(msgID int64, target, payloadB64, macB64 string) (string, e
 	nonce := raw[:nonceSize]
 	ciphertext := raw[nonceSize:]
 
-	// Recompute HMAC
 	macInput := buildMACInput(ciphertext, msgID, target)
 	h := hmac.New(sha256.New, kMac)
 	h.Write(macInput)

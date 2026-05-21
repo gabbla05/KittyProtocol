@@ -10,44 +10,48 @@ import (
 	"encoding/pem"
 	"fmt"
 	"math/big"
+	"net"
 	"os"
 	"path/filepath"
 	"time"
 )
 
-// SetupTLSConfig ładuje certyfikaty z plików lub generuje nowe samopodpisane, jeśli ich brakuje.
+const (
+	DefaultOrgName       = "KittyProtocol Dev Environment"
+	DefaultCertValidity  = 365 * 24 * time.Hour
+	DefaultServerDNSName = "kitty-hub"
+)
+
+// SetupTLSConfig loads certificates from disk or generates new self-signed ones.
 func SetupTLSConfig(certPath, keyPath string) (*tls.Config, error) {
-	// Sprawdzenie, czy certyfikaty już istnieją na dysku
 	if _, err := os.Stat(certPath); os.IsNotExist(err) {
-		fmt.Println("[CertManager] Brak certyfikatów TLS. Generowanie nowych dla środowiska testowego...")
-		if err := generateSelfSignedCert(certPath, keyPath); err != nil {
-			return nil, fmt.Errorf("nie udało się wygenerować certyfikatów: %w", err)
+		fmt.Println("[CertManager] No TLS certificates found. Generating new self-signed certificates...")
+		if err := GenerateSelfSignedCert(certPath, keyPath, DefaultServerDNSName); err != nil {
+			return nil, fmt.Errorf("failed to generate certificates: %w", err)
 		}
 	}
 
-	// Wczytanie pary kluczy
 	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
 	if err != nil {
-		return nil, fmt.Errorf("nie udało się wczytać plików certyfikatu: %w", err)
+		return nil, fmt.Errorf("failed to load certificate files: %w", err)
 	}
 
-	// Konfiguracja i wymuszenie TLS 1.3
 	return &tls.Config{
 		Certificates: []tls.Certificate{cert},
 		MinVersion:   tls.VersionTLS13,
-		NextProtos:   []string{"kitty-quic-v1"}, // Wymóg standardu QUIC (ALPN)
+		NextProtos:   []string{"kitty-quic-v1"},
 	}, nil
 }
 
-// generateSelfSignedCert generuje bezpieczny certyfikat ECDSA z krzywą P-256
-func generateSelfSignedCert(certPath, keyPath string) error {
+// GenerateSelfSignedCert creates a fully valid self-signed ECDSA certificate.
+func GenerateSelfSignedCert(certPath, keyPath, dnsName string) error {
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return err
 	}
 
 	notBefore := time.Now()
-	notAfter := notBefore.Add(365 * 24 * time.Hour) // Ważny przez rok
+	notAfter := notBefore.Add(DefaultCertValidity)
 
 	serialNumber, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
 	if err != nil {
@@ -57,14 +61,31 @@ func generateSelfSignedCert(certPath, keyPath string) error {
 	template := x509.Certificate{
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
-			Organization: []string{"KittyProtocol Dev Environment"},
+			Organization: []string{DefaultOrgName},
 		},
-		NotBefore:             notBefore,
-		NotAfter:              notAfter,
-		KeyUsage:              x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		NotBefore: notBefore,
+		NotAfter:  notAfter,
+
+		// Required for self-signed certs
+		IsCA:                  true,
 		BasicConstraintsValid: true,
-		DNSNames:              []string{"kitty-hub"},
+		KeyUsage: x509.KeyUsageDigitalSignature |
+			x509.KeyUsageCertSign,
+
+		ExtKeyUsage: []x509.ExtKeyUsage{
+			x509.ExtKeyUsageServerAuth,
+			x509.ExtKeyUsageClientAuth,
+		},
+
+		// SAN
+		DNSNames: []string{dnsName},
+		IPAddresses: []net.IP{
+			net.ParseIP("127.0.0.1"),
+			net.ParseIP("::1"),
+		},
+
+		// Recommended for compatibility
+		SignatureAlgorithm: x509.ECDSAWithSHA256,
 	}
 
 	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
@@ -72,32 +93,28 @@ func generateSelfSignedCert(certPath, keyPath string) error {
 		return err
 	}
 
-	// Upewnienie się, że folder nadrzędny istnieje (np. "certs/")
-	os.MkdirAll(filepath.Dir(certPath), 0755)
-
-	// Zapis certyfikatu (.pem)
-	certFile, err := os.Create(certPath)
-	if err != nil {
-		return err
-	}
-	defer certFile.Close()
-	if err := pem.Encode(certFile, &pem.Block{Type: "CERTIFICATE", Bytes: certDER}); err != nil {
+	if err := os.MkdirAll(filepath.Dir(certPath), 0755); err != nil {
 		return err
 	}
 
-	// Zapis klucza prywatnego (.pem)
-	keyFile, err := os.Create(keyPath)
-	if err != nil {
+	if err := writePEM(certPath, "CERTIFICATE", certDER); err != nil {
 		return err
 	}
-	defer keyFile.Close()
+
 	privBytes, err := x509.MarshalECPrivateKey(priv)
 	if err != nil {
 		return err
 	}
-	if err := pem.Encode(keyFile, &pem.Block{Type: "EC PRIVATE KEY", Bytes: privBytes}); err != nil {
+
+	return writePEM(keyPath, "EC PRIVATE KEY", privBytes)
+}
+
+func writePEM(path, pemType string, data []byte) error {
+	f, err := os.Create(path)
+	if err != nil {
 		return err
 	}
+	defer f.Close()
 
-	return nil
+	return pem.Encode(f, &pem.Block{Type: pemType, Bytes: data})
 }

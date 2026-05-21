@@ -111,7 +111,7 @@ func TestHappyPathE2E(t *testing.T) {
 	bobAuth := protocol.AuthFrame{
 		BaseFrame: protocol.BaseFrame{Type: "AUTH", MsgID: time.Now().UnixMilli()},
 		User:      "bob",
-		Pass:      "secret", // Hasło z mock DB
+		Pass:      "password", // Hasło z mock DB
 	}
 	b, _ = json.Marshal(bobAuth)
 	bobStream.Write(b)

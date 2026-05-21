@@ -1,16 +1,20 @@
+// hub/errors.go
+// Centralized helpers for sending protocol-level ERROR frames from the Hub.
+
 package main
 
 import (
-	"encoding/json" // Dodano dla json.Marshal
+	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/gabbla05/KittyProtocol/protocol"
 	"github.com/quic-go/quic-go"
 )
 
-// sendError wysyła ustandaryzowaną ramkę ERROR do klienta.
+// sendError sends a standardized ERROR frame to the client.
+// Serialization or write failures are logged but do not panic.
 func sendError(stream *quic.Stream, code, desc string) {
-	// TASK 10: Użycie ErrorFrame zamiast UniversalFrame
 	errFrame := protocol.ErrorFrame{
 		BaseFrame: protocol.BaseFrame{
 			Type:  "ERROR",
@@ -20,7 +24,13 @@ func sendError(stream *quic.Stream, code, desc string) {
 		Desc: desc,
 	}
 
-	// Serializacja przy użyciu standardowej biblioteki
-	b, _ := json.Marshal(errFrame)
-	stream.Write(b)
+	b, err := json.Marshal(errFrame)
+	if err != nil {
+		fmt.Println("[Hub: Errors] Failed to marshal ERROR frame:", err)
+		return
+	}
+
+	if _, err := stream.Write(b); err != nil {
+		fmt.Println("[Hub: Errors] Failed to send ERROR frame:", err)
+	}
 }
