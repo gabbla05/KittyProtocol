@@ -231,26 +231,16 @@ cryptoee                 100%
 ### 6.1 KIT‑12 — Headless test script
 - Automated end‑to‑end test: Hub + 2 clients
 
-### 6.2 KIT‑14 — Load test (max clients)
-- Determine maximum number of concurrent clients
-
-### 6.3 KIT‑15 — CPU performance test
-- Analyze routing performance vs CPU cores
-
-### 6.4 KIT‑16 — Negative tests
-- ERR_04 (bad password)
-- ERR_15/ERR_16 (offline user)
-
-### 6.5 KIT‑20 — GET_STATUS / STATUS_RES
+### 6.2 KIT‑20 — GET_STATUS / STATUS_RES
 - Online/offline presence system
 
-### 6.6 KIT‑17 — PostgreSQL AUTH backend
+### 6.3 KIT‑17 — PostgreSQL AUTH backend
 - Replace mock DB with real database
 
-### 6.7 KIT‑33 — Permission system
+### 6.4 KIT‑33 — Permission system
 - Allow‑list for incoming messages (anti‑spam)
 
-### 6.8 GUI tasks (Meowssenger)
+### 6.5 GUI tasks (Meowssenger)
 - KIT‑22: Main window
 - KIT‑23: Search Username (GET_STATUS)
 - KIT‑24: Local E2EE module
