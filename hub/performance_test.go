@@ -191,7 +191,7 @@ func BenchmarkHubRouting(b *testing.B) {
 }
 
 func saveToHistory(hostname string, maxCores int, testCores int, totalOps int, duration time.Duration) {
-	filename := "benchmark_history.md"
+	filename := "../markdowns/benchmark_history.md"
 	_, err := os.Stat(filename)
 	isNewFile := os.IsNotExist(err)
 
