@@ -35,6 +35,11 @@ func (c *clientContext) handleData(raw []byte) {
 		return
 	}
 
+	if c.session.Target == "" {
+		sendError(c.stream, "ERR_15", "User has no active chat target")
+		return
+	}
+
 	// Rate limiting.
 	if !c.session.Limiter.Allow() {
 		sendError(c.stream, "ERR_07", "Rate limit exceeded")

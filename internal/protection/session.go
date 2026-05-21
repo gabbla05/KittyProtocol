@@ -24,6 +24,7 @@ type Session struct {
 	CloseFunc  func()
 	Conn       *quic.Conn
 	Stream     *quic.Stream
+	Target     string
 	Replay     *ReplayDetector
 }
 

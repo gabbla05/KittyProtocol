@@ -4,6 +4,7 @@ package app
 // The function blocks until the user exits the chat or the client disconnects.
 func (a *App) RunChatSession(target string) {
 	a.client.SetTarget(target)
+	_ = a.client.SendGetStatus(target)
 	a.ui.Printf("Wybrano rozmówcę: %s\n", target)
 
 	secret := a.ui.ReadSharedSecret()
@@ -31,6 +32,14 @@ func (a *App) RunChatSession(target string) {
 			continue
 
 		case "/quit":
+			// 1. Send to the hub information about the end of conversation
+			_ = a.client.SendGetStatus("") // target = "" means ther e is no receiver
+
+			// 2. Clean up target locally
+			a.client.SetTarget("")
+
+			// 3. Exit to menu
+			a.printMenu()
 			return
 
 		case "/replay":

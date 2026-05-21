@@ -18,10 +18,33 @@ func (c *clientContext) handleGetStatus(raw []byte) {
 		return
 	}
 
+	if frame.Target == "" {
+		if c.session != nil {
+			c.session.Target = ""
+		}
+
+		res := protocol.StatusResFrame{
+			BaseFrame: protocol.BaseFrame{
+				Type:  "STATUS_RES",
+				MsgID: frame.MsgID,
+			},
+			Target: "",
+			Status: "no_target",
+		}
+
+		b, _ := json.Marshal(res)
+		c.stream.Write(b)
+		return
+	}
+
 	online := globalSessions.IsOnline(frame.Target)
 	status := "offline"
 	if online {
 		status = "online"
+	}
+
+	if c.session != nil {
+		c.session.Target = frame.Target
 	}
 
 	res := protocol.StatusResFrame{
