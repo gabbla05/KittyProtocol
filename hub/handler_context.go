@@ -10,10 +10,10 @@ import (
 
 // clientContext stores all state related to a single client connection.
 // It keeps track of:
-// - QUIC connection and stream
-// - authenticated session (after AUTH)
-// - username
-// - AUTH timeout timer
+//   - QUIC connection and stream
+//   - authenticated session (after AUTH)
+//   - username
+//   - AUTH timeout timer
 type clientContext struct {
 	conn      *quic.Conn
 	stream    *quic.Stream
@@ -31,9 +31,11 @@ func (c *clientContext) cleanup() {
 		if c.session.CloseFunc != nil {
 			c.session.CloseFunc()
 		}
+		c.session = nil
 	}
 	if c.authTimer != nil {
 		c.authTimer.Stop()
+		c.authTimer = nil
 	}
 }
 

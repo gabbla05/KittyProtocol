@@ -8,9 +8,9 @@ import (
 )
 
 // handleGetStatus processes GET_STATUS:
-// - parses the frame
-// - checks if target user is online
-// - sends STATUS_RES with "online" or "offline"
+//   - parses the frame
+//   - checks if target user is online
+//   - sends STATUS_RES with "online" or "offline"
 func (c *clientContext) handleGetStatus(raw []byte) {
 	frame, err := protocol.ParseGetStatusFrame(raw)
 	if err != nil {
@@ -40,6 +40,6 @@ func (c *clientContext) handleGetStatus(raw []byte) {
 	}
 
 	if _, err := c.stream.Write(b); err != nil {
-		fmt.Println("[Hub: HandlerStatus] Failed to send STATUS_RES:", err)
+		fmt.Println("[Hub: Status] Failed to send STATUS_RES:", err)
 	}
 }

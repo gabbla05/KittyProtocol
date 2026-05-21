@@ -3,7 +3,7 @@ package main
 import "fmt"
 
 // handleBye processes the BYE frame.
-// It removes the session from SessionManager and closes the connection.
+// It removes the session from SessionManager and triggers cleanup.
 func (c *clientContext) handleBye() {
 	if c.session != nil {
 		fmt.Println("[Handler: Bye] Cleaning up session for:", c.username)
@@ -11,5 +11,6 @@ func (c *clientContext) handleBye() {
 		if c.session.CloseFunc != nil {
 			c.session.CloseFunc()
 		}
+		c.session = nil
 	}
 }
