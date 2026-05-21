@@ -1,3 +1,7 @@
+// main.go
+// Entry point for the CLI version of KittyClient.
+// This file wires together the API, UI and App layers.
+
 package main
 
 import (
@@ -15,27 +19,18 @@ func main() {
 	client := api.NewKittyClient()
 	ui := ui_cli.NewCliUI(client)
 
-	// jeden wspólny kanał disconnected
+	// Shared disconnection channel for App and background loops.
 	disconnected := make(chan struct{})
 
 	application := app.NewApp(client, ui, disconnected)
 
-	// ACK handler
+	// Register ACK event handler (UI implements AckEventHandler).
 	client.RegisterAckHandler(ui)
 
-	// sygnały OS
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
+	// OS signal handling (Ctrl+C, SIGTERM, SIGQUIT).
+	setupSignalHandler(client)
 
-	go func() {
-		<-sigCh
-		_ = client.SendBye()
-		client.Close()
-		fmt.Println("\n[Client] Session closed due to signal.")
-		os.Exit(0)
-	}()
-
-	// Connect
+	// Resolve Hub address.
 	hubAddr := os.Getenv("KITTY_HUB_ADDR")
 	if hubAddr == "" {
 		hubAddr = "127.0.0.1:9999"
@@ -43,19 +38,20 @@ func main() {
 
 	fmt.Println("[Client] Connecting to Hub:", hubAddr)
 
+	// QUIC connection.
 	if err := client.Connect(hubAddr); err != nil {
 		fmt.Println("[Client] Connection error:", err)
 		return
 	}
 
-	// HELLO
+	// HELLO handshake.
 	if err := client.WaitForHelloOK(); err != nil {
 		fmt.Println("[Client] HELLO failed:", err)
 		client.Close()
 		return
 	}
 
-	// AUTH
+	// AUTH.
 	user, pass := ui.ReadCredentials()
 	if err := client.SendAuth(user, pass); err != nil {
 		fmt.Println("[Client] AUTH send error:", err)
@@ -69,13 +65,28 @@ func main() {
 		return
 	}
 
-	// background loops
+	// Background loops.
 	client.StartReceiverLoop(disconnected)
 	client.StartPingLoop()
 
-	// workflow
+	// Main workflow.
 	application.RunMainMenu()
 
-	// cleanup
+	// Cleanup.
 	client.Close()
+}
+
+// setupSignalHandler installs a handler for OS termination signals.
+// On signal, the client sends BYE, closes the session and exits.
+func setupSignalHandler(client *api.KittyClient) {
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
+
+	go func() {
+		<-sigCh
+		_ = client.SendBye()
+		client.Close()
+		fmt.Println("\n[Client] Session closed due to signal.")
+		os.Exit(0)
+	}()
 }

@@ -2,25 +2,30 @@ package app
 
 import "strings"
 
+// RunMainMenu displays the main command loop.
+// It blocks until the user quits or the client disconnects.
 func (a *App) RunMainMenu() {
 	for {
-		// sprawdzamy, czy klient nie został rozłączony
+		// Check for disconnection
 		select {
 		case <-a.disconnected:
-			a.ui.Println("[Client] Disconnected from server. Exiting menu.")
+			a.ui.Println("[Client] Rozłączono z serwerem. Zamykanie aplikacji.")
 			return
 		default:
 		}
 
-		a.ui.Println("Dostępne komendy:")
-		a.ui.Println("  /status <user>")
-		a.ui.Println("  /chat <user>")
-		a.ui.Println("  /quit")
+		a.printMenu()
 
-		line := a.ui.ReadLine()
-		line = strings.TrimSpace(line)
+		line := strings.TrimSpace(a.ui.ReadLine())
 
 		switch {
+		case line == "":
+			continue
+
+		case line == "/quit":
+			_ = a.client.SendBye()
+			return
+
 		case strings.HasPrefix(line, "/status "):
 			user := strings.TrimSpace(strings.TrimPrefix(line, "/status "))
 			if user == "" {
@@ -37,16 +42,16 @@ func (a *App) RunMainMenu() {
 			}
 			a.RunChatSession(user)
 
-		case line == "/quit":
-			_ = a.client.SendBye()
-			return
-
-		case line == "":
-			// pusta linia – po prostu pokaż menu jeszcze raz
-			continue
-
 		default:
 			a.ui.Println("Nieznana komenda.")
 		}
 	}
+}
+
+// printMenu prints the list of available commands.
+func (a *App) printMenu() {
+	a.ui.Println("Dostępne komendy:")
+	a.ui.Println("  /status <user>")
+	a.ui.Println("  /chat <user>")
+	a.ui.Println("  /quit")
 }
