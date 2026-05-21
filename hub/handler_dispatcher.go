@@ -42,8 +42,9 @@ func handleClient(conn *quic.Conn) {
 		}
 
 		raw := buf[:n]
-		fmt.Println("[Hub: HandlerDispatcher] STREAM ID:", stream.StreamID())
-		fmt.Println("[Hub: HandlerDispatcher] RAW:", string(raw))
+		// Debug logging (can be commented out in production)
+		// fmt.Println("[Hub: HandlerDispatcher] STREAM ID:", stream.StreamID())
+		// fmt.Println("[Hub: HandlerDispatcher] RAW:", string(raw))
 
 		// Initial validation: extract type and msg_id.
 		typeName, _, perr := protocol.GetFrameType(raw)
@@ -52,7 +53,8 @@ func handleClient(conn *quic.Conn) {
 			continue
 		}
 
-		fmt.Println("[Hub: HandlerDispatcher] Received frame type:", typeName)
+		// Debug logging for frame type
+		// fmt.Println("[Hub: HandlerDispatcher] Received frame type:", typeName)
 
 		switch typeName {
 		case "HELLO":
