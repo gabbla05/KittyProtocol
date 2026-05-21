@@ -6,3 +6,5 @@
 - TESTY OGÓLNIE
 - KLUCZ Z PLIKU!
 - merge
+- rozwiązanie problemu z 3 rozmówcami podającymi ten sam sekret - status busy + pojedynczy czat naraz - logika aplikacyjna
+- brak mockowania!! zrobic w końcu normalne połączenie z bazą danych

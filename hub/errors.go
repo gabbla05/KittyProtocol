@@ -1,4 +1,6 @@
 // hub/errors.go
+// Centralized helpers for sending protocol-level ERROR frames from the Hub.
+
 package main
 
 import (
@@ -11,7 +13,7 @@ import (
 )
 
 // sendError sends a standardized ERROR frame to the client.
-// It logs serialization/write errors but does not panic.
+// Serialization or write failures are logged but do not panic.
 func sendError(stream *quic.Stream, code, desc string) {
 	errFrame := protocol.ErrorFrame{
 		BaseFrame: protocol.BaseFrame{

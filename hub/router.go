@@ -1,4 +1,6 @@
 // hub/router.go
+// Routing logic for DATA frames between active user sessions.
+
 package main
 
 import (
@@ -12,6 +14,7 @@ import (
 
 // routeData forwards a DATA frame from the sender to the target session.
 // It performs only protocol-level checks (session existence, stream availability).
+// Returns true on successful delivery, false if an error was reported to the sender.
 func routeData(frame protocol.DataFrame, sender *protection.Session, senderStream *quic.Stream) bool {
 	targetSess, ok := globalSessions.Get(frame.Target)
 	if !ok {
@@ -37,6 +40,7 @@ func routeData(frame protocol.DataFrame, sender *protection.Session, senderStrea
 
 	fb, err := json.Marshal(forward)
 	if err != nil {
+		fmt.Println("[Hub: Router] Failed to marshal forwarded DATA:", err)
 		sendError(senderStream, "ERR_02", "Failed to marshal forwarded DATA")
 		return false
 	}
