@@ -10,12 +10,12 @@ import (
 	"encoding/pem"
 	"fmt"
 	"math/big"
+	"net"
 	"os"
 	"path/filepath"
 	"time"
 )
 
-// Default values for development certificates.
 const (
 	DefaultOrgName       = "KittyProtocol Dev Environment"
 	DefaultCertValidity  = 365 * 24 * time.Hour
@@ -23,9 +23,7 @@ const (
 )
 
 // SetupTLSConfig loads certificates from disk or generates new self-signed ones.
-// This function is intended for development and testing environments.
 func SetupTLSConfig(certPath, keyPath string) (*tls.Config, error) {
-	// Generate certificates if missing.
 	if _, err := os.Stat(certPath); os.IsNotExist(err) {
 		fmt.Println("[CertManager] No TLS certificates found. Generating new self-signed certificates...")
 		if err := GenerateSelfSignedCert(certPath, keyPath, DefaultServerDNSName); err != nil {
@@ -33,13 +31,11 @@ func SetupTLSConfig(certPath, keyPath string) (*tls.Config, error) {
 		}
 	}
 
-	// Load certificate pair.
 	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load certificate files: %w", err)
 	}
 
-	// Configure TLS 1.3 with ALPN for QUIC.
 	return &tls.Config{
 		Certificates: []tls.Certificate{cert},
 		MinVersion:   tls.VersionTLS13,
@@ -47,7 +43,7 @@ func SetupTLSConfig(certPath, keyPath string) (*tls.Config, error) {
 	}, nil
 }
 
-// GenerateSelfSignedCert creates a self-signed ECDSA certificate for development.
+// GenerateSelfSignedCert creates a fully valid self-signed ECDSA certificate.
 func GenerateSelfSignedCert(certPath, keyPath, dnsName string) error {
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -67,12 +63,29 @@ func GenerateSelfSignedCert(certPath, keyPath, dnsName string) error {
 		Subject: pkix.Name{
 			Organization: []string{DefaultOrgName},
 		},
-		NotBefore:             notBefore,
-		NotAfter:              notAfter,
-		KeyUsage:              x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		NotBefore: notBefore,
+		NotAfter:  notAfter,
+
+		// Required for self-signed certs
+		IsCA:                  true,
 		BasicConstraintsValid: true,
-		DNSNames:              []string{dnsName},
+		KeyUsage: x509.KeyUsageDigitalSignature |
+			x509.KeyUsageCertSign,
+
+		ExtKeyUsage: []x509.ExtKeyUsage{
+			x509.ExtKeyUsageServerAuth,
+			x509.ExtKeyUsageClientAuth,
+		},
+
+		// SAN
+		DNSNames: []string{dnsName},
+		IPAddresses: []net.IP{
+			net.ParseIP("127.0.0.1"),
+			net.ParseIP("::1"),
+		},
+
+		// Recommended for compatibility
+		SignatureAlgorithm: x509.ECDSAWithSHA256,
 	}
 
 	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
@@ -80,21 +93,19 @@ func GenerateSelfSignedCert(certPath, keyPath, dnsName string) error {
 		return err
 	}
 
-	// Ensure directory exists.
 	if err := os.MkdirAll(filepath.Dir(certPath), 0755); err != nil {
 		return err
 	}
 
-	// Write certificate.
 	if err := writePEM(certPath, "CERTIFICATE", certDER); err != nil {
 		return err
 	}
 
-	// Write private key.
 	privBytes, err := x509.MarshalECPrivateKey(priv)
 	if err != nil {
 		return err
 	}
+
 	return writePEM(keyPath, "EC PRIVATE KEY", privBytes)
 }
 
