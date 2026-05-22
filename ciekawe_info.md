@@ -1,0 +1,1 @@
+- jak nie ma usera to gdy pytamy o jego status, to mim oto pokazuje offline gdy pytamy czy jest - brak zdradzania czy user istnieje

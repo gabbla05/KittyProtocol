@@ -14,7 +14,7 @@ import (
 // It handles:
 //
 //   - MEOW_OK      → delivery acknowledgments,
-//   - ERROR        → server‑side errors,
+//   - ERROR        → server-side errors,
 //   - DATA         → encrypted application messages,
 //   - STATUS_RES   → presence responses.
 //
@@ -28,6 +28,7 @@ func (c *KittyClient) StartReceiverLoop(disconnected chan struct{}) {
 	replay := c.replay
 	ackMgr := c.ackMgr
 	stopRecv := c.stopRecv
+	handler := c.appHandler
 	c.mu.Unlock()
 
 	if stream == nil {
@@ -67,8 +68,6 @@ func (c *KittyClient) StartReceiverLoop(disconnected chan struct{}) {
 
 			switch typeName {
 			case "MEOW_OK":
-				// Delivery acknowledgment (optional).
-				// If no AckManager is configured, this is silently ignored.
 				if ackMgr != nil {
 					ackMgr.NotifyDelivered(msgID)
 				}
@@ -85,24 +84,21 @@ func (c *KittyClient) StartReceiverLoop(disconnected chan struct{}) {
 				}
 
 			case "DATA":
-				c.mu.Lock()
-				kEnc := c.kEnc
-				kMac := c.kMac
-				c.mu.Unlock()
-
-				if kEnc == nil || kMac == nil {
-					fmt.Println("\n[Client] No shared secret set — cannot decrypt.\n> ")
-					continue
-				}
-
 				var df protocol.DataFrame
 				if json.Unmarshal(buf[:n], &df) != nil {
 					fmt.Println("\n[Client: Receive] Failed to parse DATA frame\n> ")
 					continue
 				}
 
-				// Client‑side replay protection (silent drop)
+				// Client-side replay protection (silent drop)
 				if replay != nil && replay.MarkAndCheck(df.MsgID) {
+					continue
+				}
+
+				// Select keys based on logical sender.
+				kEnc, kMac, ok := c.getKeysForPeer(df.Sender)
+				if !ok {
+					fmt.Printf("\n[Client] No shared secret for sender %s — cannot decrypt.\n> ", df.Sender)
 					continue
 				}
 
@@ -119,7 +115,11 @@ func (c *KittyClient) StartReceiverLoop(disconnected chan struct{}) {
 					continue
 				}
 
-				fmt.Printf("\n[Client: Receive] Message from %s: %s\n> ", df.Sender, plaintext)
+				if handler != nil {
+					handler(df.Sender, []byte(plaintext))
+				} else {
+					fmt.Printf("\n[Client: Receive] Message from %s: %s\n> ", df.Sender, string(plaintext))
+				}
 
 			case "STATUS_RES":
 				var sf protocol.StatusResFrame

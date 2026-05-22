@@ -7,3 +7,4 @@
 - rozwiązanie problemu z 3 rozmówcami podającymi ten sam sekret - status busy + pojedynczy czat naraz - logika aplikacyjna
 - brak mockowania!! zrobic w końcu normalne połączenie z bazą danych i tam przechowywanie, a nie tak jak teraz `internal/auth/auth.go`
 - jeżeli ramka PROTOKOŁU pełni obecnie więcej niż jedną funkcję logiczną (jak np. w przypadku operacji /quit i GET_STATUS) to gdy zaimpplementuje się logikę aplikacji to zmienić koniecznie 
+- sprawdzić czy kody błędów się zgadzają z dokumentacją

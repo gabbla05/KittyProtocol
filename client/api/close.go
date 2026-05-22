@@ -1,7 +1,6 @@
 package api
 
 import (
-	"github.com/gabbla05/KittyProtocol/internal/cryptoee"
 	"github.com/gabbla05/KittyProtocol/internal/protection"
 )
 
@@ -12,7 +11,7 @@ import (
 //   - cancels the internal context,
 //   - zeroizes encryption keys,
 //   - resets replay detector and ACK manager,
-//   - clears session state (target, lastFrame).
+//   - clears session state (user, target, lastFrame).
 //
 // This method is idempotent: calling it multiple times is safe.
 func (c *KittyClient) Close() {
@@ -46,17 +45,8 @@ func (c *KittyClient) Close() {
 		c.conn = nil
 	}
 
-	// Zeroize keys
-	if c.kEnc != nil {
-		cryptoee.Zeroize(c.kEnc)
-		c.kEnc = nil
-	}
-	if c.kMac != nil {
-		cryptoee.Zeroize(c.kMac)
-		c.kMac = nil
-	}
-
 	// Reset session state
+	c.user = ""
 	c.target = ""
 	c.lastFrame = nil
 	c.replay = protection.NewReplayDetector()

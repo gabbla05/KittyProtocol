@@ -42,6 +42,12 @@ func (c *KittyClient) SendAuth(user, pass string) error {
 		return err
 	}
 
+	// Persist authenticated username in client state.
+	// This is used by the App layer (chat frames, UI, etc.).
+	c.mu.Lock()
+	c.user = user
+	c.mu.Unlock()
+
 	_, err = stream.Write(b)
 	return err
 }

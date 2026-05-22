@@ -27,6 +27,9 @@ func main() {
 	// Register ACK event handler (UI implements AckEventHandler).
 	client.RegisterAckHandler(ui)
 
+	// APP PAYLOAD (chat)
+	client.RegisterAppPayloadHandler(application.HandleIncomingPayload)
+
 	// OS signal handling (Ctrl+C, SIGTERM, SIGQUIT).
 	setupSignalHandler(client)
 

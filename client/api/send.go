@@ -9,26 +9,16 @@ import (
 	"github.com/gabbla05/KittyProtocol/protocol"
 )
 
-// SendMessage encrypts the plaintext using the current shared secret,
-// registers the message for ACK tracking (MEOW_OK), and sends a DATA frame
-// to the Hub.
-//
-// Requirements:
-//   - shared secret must be set (kEnc, kMac != nil),
-//   - target must be set,
-//   - stream must be non‑nil.
+// SendMessage encrypts the plaintext using the current shared secret for the
+// active target, registers the message for ACK tracking (MEOW_OK),
+// and sends a DATA frame.
 func (c *KittyClient) SendMessage(text string) error {
 	c.mu.Lock()
 	stream := c.stream
 	target := c.target
 	ackMgr := c.ackMgr
-	kEnc := c.kEnc
-	kMac := c.kMac
 	c.mu.Unlock()
 
-	if kEnc == nil || kMac == nil {
-		return errors.New("shared secret not set")
-	}
 	if stream == nil {
 		return errors.New("stream is nil")
 	}
@@ -36,14 +26,17 @@ func (c *KittyClient) SendMessage(text string) error {
 		return errors.New("target not set")
 	}
 
+	kEnc, kMac, ok := c.getKeysForPeer(target)
+	if !ok {
+		return errors.New("no shared secret for target")
+	}
+
 	msgID := time.Now().UnixMilli()
 
-	// Register pending ACK
 	if ackMgr != nil {
 		ackMgr.AddPending(msgID)
 	}
 
-	// E2EE encryption
 	payloadB64, macB64, err := cryptoee.EncryptAndMACWithKeys(msgID, target, text, kEnc, kMac)
 	if err != nil {
 		return err
@@ -64,12 +57,10 @@ func (c *KittyClient) SendMessage(text string) error {
 		return err
 	}
 
-	// Send frame
 	if _, err := stream.Write(b); err != nil {
 		return err
 	}
 
-	// Remember last frame for replay testing (CLI /replay command only).
 	c.mu.Lock()
 	c.lastFrame = b
 	c.mu.Unlock()
@@ -77,8 +68,64 @@ func (c *KittyClient) SendMessage(text string) error {
 	return nil
 }
 
+// SendAppFrameEncrypted sends an application-level frame (chat control, text, etc.)
+// encrypted as DATA with MAC. The Hub requires MAC for all DATA frames.
+func (c *KittyClient) SendAppFrameEncrypted(target string, payload []byte) error {
+	c.mu.Lock()
+	stream := c.stream
+	ackMgr := c.ackMgr
+	c.mu.Unlock()
+
+	if stream == nil {
+		return errors.New("stream is nil")
+	}
+	if target == "" {
+		return errors.New("target not set")
+	}
+
+	kEnc, kMac, ok := c.getKeysForPeer(target)
+	if !ok {
+		return errors.New("no shared secret for target")
+	}
+
+	msgID := time.Now().UnixMilli()
+
+	if ackMgr != nil {
+		ackMgr.AddPending(msgID)
+	}
+
+	// Encrypt JSON payload
+	payloadB64, macB64, err := cryptoee.EncryptAndMACWithKeys(
+		msgID,
+		target,
+		string(payload),
+		kEnc,
+		kMac,
+	)
+	if err != nil {
+		return err
+	}
+
+	frame := protocol.DataFrame{
+		BaseFrame: protocol.BaseFrame{
+			Type:  "DATA",
+			MsgID: msgID,
+		},
+		Target:  target,
+		Payload: payloadB64,
+		MAC:     macB64,
+	}
+
+	b, err := json.Marshal(frame)
+	if err != nil {
+		return err
+	}
+
+	_, err = stream.Write(b)
+	return err
+}
+
 // SendGetStatus sends a GET_STATUS frame for a given user.
-// This is a simple presence query; it is not encrypted.
 func (c *KittyClient) SendGetStatus(target string) error {
 	c.mu.Lock()
 	stream := c.stream
@@ -107,8 +154,7 @@ func (c *KittyClient) SendGetStatus(target string) error {
 	return err
 }
 
-// SendBye sends a BYE frame to the Hub and does NOT close the stream.
-// Stream closing is handled by KittyClient.Close().
+// SendBye sends a BYE frame to the Hub.
 func (c *KittyClient) SendBye() error {
 	c.mu.Lock()
 	stream := c.stream

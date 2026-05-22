@@ -1,15 +1,26 @@
 package api
 
-import "github.com/gabbla05/KittyProtocol/internal/cryptoee"
+import (
+	"errors"
 
-// SetSharedSecret derives encryption and MAC keys from the shared secret
-// and stores them in the client.
+	"github.com/gabbla05/KittyProtocol/internal/cryptoee"
+)
+
+// SetSharedSecretForPeer derives encryption and MAC keys from the shared secret
+// and stores them for a specific peer (logical username).
 //
 // SECURITY:
-//   - Keys are derived using a KDF implemented in internal/cryptoee.
+//   - Keys are derived using HKDF-SHA256 in internal/cryptoee.
 //   - Keys are zeroized and cleared in KittyClient.Close().
 //   - Keys are kept only in memory and never written to disk.
-func (c *KittyClient) SetSharedSecret(secret []byte) error {
+func (c *KittyClient) SetSharedSecretForPeer(peer string, secret []byte) error {
+	if peer == "" {
+		return errors.New("peer cannot be empty")
+	}
+	if len(secret) == 0 {
+		return errors.New("secret cannot be empty")
+	}
+
 	kEnc, kMac, err := cryptoee.DeriveKeysFromSecret(secret)
 	if err != nil {
 		return err
@@ -18,7 +29,12 @@ func (c *KittyClient) SetSharedSecret(secret []byte) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.kEnc = kEnc
-	c.kMac = kMac
+	if c.peerKeys == nil {
+		c.peerKeys = make(map[string]peerKeys)
+	}
+	c.peerKeys[peer] = peerKeys{
+		kEnc: kEnc,
+		kMac: kMac,
+	}
 	return nil
 }
