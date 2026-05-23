@@ -9,83 +9,36 @@ import (
 	"github.com/gabbla05/KittyProtocol/protocol"
 )
 
-// SendMessage encrypts the plaintext using the current shared secret for the
-// active target, registers the message for ACK tracking (MEOW_OK),
-// and sends a DATA frame.
-func (c *KittyClient) SendMessage(text string) error {
-	c.mu.Lock()
-	stream := c.stream
-	target := c.target
-	ackMgr := c.ackMgr
-	c.mu.Unlock()
-
-	if stream == nil {
-		return errors.New("stream is nil")
-	}
-	if target == "" {
-		return errors.New("target not set")
-	}
-
-	kEnc, kMac, ok := c.getKeysForPeer(target)
-	if !ok {
-		return errors.New("no shared secret for target")
-	}
-
-	msgID := time.Now().UnixMilli()
-
-	if ackMgr != nil {
-		ackMgr.AddPending(msgID)
-	}
-
-	payloadB64, macB64, err := cryptoee.EncryptAndMACWithKeys(msgID, target, text, kEnc, kMac)
-	if err != nil {
-		return err
-	}
-
-	frame := protocol.DataFrame{
-		BaseFrame: protocol.BaseFrame{
-			Type:  "DATA",
-			MsgID: msgID,
-		},
-		Target:  target,
-		Payload: payloadB64,
-		MAC:     macB64,
-	}
-
-	b, err := json.Marshal(frame)
-	if err != nil {
-		return err
-	}
-
-	if _, err := stream.Write(b); err != nil {
-		return err
-	}
-
-	c.mu.Lock()
-	c.lastFrame = b
-	c.mu.Unlock()
-
-	return nil
-}
-
 // SendAppFrameEncrypted sends an application-level frame (chat control, text, etc.)
-// encrypted as DATA with MAC. The Hub requires MAC for all DATA frames.
+// encrypted as a DATA frame. The Hub requires MAC for all DATA frames.
 func (c *KittyClient) SendAppFrameEncrypted(target string, payload []byte) error {
 	c.mu.Lock()
 	stream := c.stream
 	ackMgr := c.ackMgr
+
+	var (
+		kEnc []byte
+		kMac []byte
+		ok   bool
+	)
+	if c.peerKeys != nil {
+		pk, exists := c.peerKeys[target]
+		if exists {
+			kEnc = pk.kEnc
+			kMac = pk.kMac
+			ok = true
+		}
+	}
 	c.mu.Unlock()
 
+	if !ok {
+		return errors.New("no shared secret for target")
+	}
 	if stream == nil {
 		return errors.New("stream is nil")
 	}
 	if target == "" {
 		return errors.New("target not set")
-	}
-
-	kEnc, kMac, ok := c.getKeysForPeer(target)
-	if !ok {
-		return errors.New("no shared secret for target")
 	}
 
 	msgID := time.Now().UnixMilli()
@@ -94,7 +47,6 @@ func (c *KittyClient) SendAppFrameEncrypted(target string, payload []byte) error
 		ackMgr.AddPending(msgID)
 	}
 
-	// Encrypt JSON payload
 	payloadB64, macB64, err := cryptoee.EncryptAndMACWithKeys(
 		msgID,
 		target,

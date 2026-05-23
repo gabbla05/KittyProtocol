@@ -1,19 +1,21 @@
 package api
 
 import (
+	"github.com/gabbla05/KittyProtocol/internal/cryptoee"
 	"github.com/gabbla05/KittyProtocol/internal/protection"
 )
 
-// Close gracefully shuts down the client:
+// Close gracefully shuts down the client and securely clears all sensitive data.
 //
+// Behavior:
 //   - stops ping and receiver loops,
 //   - closes the QUIC stream and connection,
 //   - cancels the internal context,
-//   - zeroizes encryption keys,
+//   - zeroizes all per‑peer E2EE keys,
 //   - resets replay detector and ACK manager,
-//   - clears session state (user, target, lastFrame).
+//   - clears session metadata.
 //
-// This method is idempotent: calling it multiple times is safe.
+// This method is idempotent.
 func (c *KittyClient) Close() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -35,15 +37,35 @@ func (c *KittyClient) Close() {
 		c.cancel()
 	}
 
-	// Close stream and connection
+	// Forcefully interrupt any blocking Read/Write
+	if c.stream != nil {
+		c.stream.CancelRead(0)
+		c.stream.CancelWrite(0)
+	}
+
+	// Close stream
 	if c.stream != nil {
 		_ = c.stream.Close()
 		c.stream = nil
 	}
+
+	// Close connection
 	if c.conn != nil {
 		_ = c.conn.CloseWithError(0, "client closed")
 		c.conn = nil
 	}
+
+	// Zeroize all per‑peer E2EE keys
+	for peer, pk := range c.peerKeys {
+		if pk.kEnc != nil {
+			cryptoee.Zeroize(pk.kEnc)
+		}
+		if pk.kMac != nil {
+			cryptoee.Zeroize(pk.kMac)
+		}
+		delete(c.peerKeys, peer)
+	}
+	c.peerKeys = nil
 
 	// Reset session state
 	c.user = ""

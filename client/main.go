@@ -22,17 +22,6 @@ func main() {
 	// Shared disconnection channel for App and background loops.
 	disconnected := make(chan struct{})
 
-	application := app.NewApp(client, ui, disconnected)
-
-	// Register ACK event handler (UI implements AckEventHandler).
-	client.RegisterAckHandler(ui)
-
-	// APP PAYLOAD (chat)
-	client.RegisterAppPayloadHandler(application.HandleIncomingPayload)
-
-	// OS signal handling (Ctrl+C, SIGTERM, SIGQUIT).
-	setupSignalHandler(client)
-
 	// Resolve Hub address.
 	hubAddr := os.Getenv("KITTY_HUB_ADDR")
 	if hubAddr == "" {
@@ -41,21 +30,22 @@ func main() {
 
 	fmt.Println("[Client] Connecting to Hub:", hubAddr)
 
-	// QUIC connection.
+	// 1. QUIC connection + stream + HELLO (Connect() does all of this)
 	if err := client.Connect(hubAddr); err != nil {
 		fmt.Println("[Client] Connection error:", err)
 		return
 	}
 
-	// HELLO handshake.
+	// 2. Wait for MEOW_OK after HELLO
 	if err := client.WaitForHelloOK(); err != nil {
 		fmt.Println("[Client] HELLO failed:", err)
 		client.Close()
 		return
 	}
 
-	// AUTH.
+	// 3. AUTH
 	user, pass := ui.ReadCredentials()
+
 	if err := client.SendAuth(user, pass); err != nil {
 		fmt.Println("[Client] AUTH send error:", err)
 		client.Close()
@@ -68,14 +58,27 @@ func main() {
 		return
 	}
 
-	// Background loops.
+	// 4. Create App layer
+	application := app.NewApp(client, ui, disconnected)
+
+	// 5. Initialize per-user SecretStore
+	application.InitSecretStoreForUser(client.User())
+
+	// 6. Register handlers
+	client.RegisterAckHandler(ui)
+	client.RegisterAppPayloadHandler(application.HandleIncomingPayload)
+
+	// 7. OS signal handling
+	setupSignalHandler(client)
+
+	// 8. Start background loops
 	client.StartReceiverLoop(disconnected)
 	client.StartPingLoop()
 
-	// Main workflow.
+	// 9. Main workflow
 	application.RunMainMenu()
 
-	// Cleanup.
+	// 10. Cleanup
 	client.Close()
 }
 

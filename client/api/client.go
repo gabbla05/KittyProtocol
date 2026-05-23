@@ -92,10 +92,8 @@ func (c *KittyClient) User() string {
 }
 
 // getKeysForPeer returns derived keys for a given peer, if present.
+// Caller MUST hold c.mu.
 func (c *KittyClient) getKeysForPeer(peer string) (kEnc, kMac []byte, ok bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	if c.peerKeys == nil {
 		return nil, nil, false
 	}

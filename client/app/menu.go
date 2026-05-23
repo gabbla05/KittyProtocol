@@ -1,13 +1,14 @@
 package app
 
 import (
+	"bytes"
+	"os"
 	"strings"
 )
 
 // RunMainMenu displays the main command loop.
 func (a *App) RunMainMenu() {
 	for {
-		// Check for disconnection
 		select {
 		case <-a.disconnected:
 			a.ui.Println("[Client] Rozłączono z serwerem. Zamykanie aplikacji.")
@@ -37,15 +38,29 @@ func (a *App) RunMainMenu() {
 			}
 			_ = a.client.SendGetStatus(user)
 
-		// Configure shared secret for a peer (persisted locally)
+			// Configure shared secret for a peer (E2EE)
 		case strings.HasPrefix(line, "/secret "):
-			user := strings.TrimSpace(strings.TrimPrefix(line, "/secret "))
-			if user == "" {
-				a.ui.Println("Usage: /secret <user>")
+			args := strings.Fields(line)
+			if len(args) < 2 {
+				a.ui.Println("Usage: /secret <user> [file:<path>]")
 				continue
 			}
 
-			secret := a.ui.ReadSharedSecret()
+			user := args[1]
+
+			var secret []byte
+			if len(args) == 3 && strings.HasPrefix(args[2], "file:") {
+				path := strings.TrimPrefix(args[2], "file:")
+				data, err := os.ReadFile(path)
+				if err != nil {
+					a.ui.Printf("[E2EE] Failed to read secret file: %v\n", err)
+					continue
+				}
+				secret = bytes.TrimSpace(data)
+			} else {
+				secret = a.ui.ReadSharedSecret()
+			}
+
 			if err := a.client.SetSharedSecretForPeer(user, secret); err != nil {
 				a.ui.Println("[E2EE] Error deriving keys:", err)
 				continue
@@ -53,11 +68,6 @@ func (a *App) RunMainMenu() {
 			if err := a.secrets.Set(user, secret); err != nil {
 				a.ui.Println("[E2EE] Error saving secret:", err)
 				continue
-			}
-
-			// If we are about to chat with this user, mark E2EE as established.
-			if a.chatState.Active && a.chatState.ActiveTarget == user {
-				a.chatState.SetSecretEstablished(true)
 			}
 
 			a.ui.Printf("[E2EE] Shared secret configured for %s.\n", user)
@@ -81,27 +91,21 @@ func (a *App) RunMainMenu() {
 			}
 
 			// Ensure E2EE secret for this peer.
-			if !a.chatState.SecretEstablished {
-				if secret, ok := a.secrets.Get(user); ok {
-					// Load from disk silently.
-					if err := a.client.SetSharedSecretForPeer(user, secret); err != nil {
-						a.ui.Println("[E2EE] Error deriving keys from stored secret:", err)
-						continue
-					}
-					a.chatState.SetSecretEstablished(true)
-					a.ui.Printf("[E2EE] Loaded stored shared secret for %s.\n", user)
-				} else {
-					// Ask user and persist.
-					secret := a.ui.ReadSharedSecret()
-					if err := a.client.SetSharedSecretForPeer(user, secret); err != nil {
-						a.ui.Println("[E2EE] Error deriving keys:", err)
-						continue
-					}
-					if err := a.secrets.Set(user, secret); err != nil {
-						a.ui.Println("[E2EE] Error saving secret:", err)
-						continue
-					}
-					a.chatState.SetSecretEstablished(true)
+			if secret, ok := a.secrets.Get(user); ok {
+				if err := a.client.SetSharedSecretForPeer(user, secret); err != nil {
+					a.ui.Println("[E2EE] Error deriving keys from stored secret:", err)
+					continue
+				}
+				a.ui.Printf("[E2EE] Loaded stored shared secret for %s.\n", user)
+			} else {
+				secret := a.ui.ReadSharedSecret()
+				if err := a.client.SetSharedSecretForPeer(user, secret); err != nil {
+					a.ui.Println("[E2EE] Error deriving keys:", err)
+					continue
+				}
+				if err := a.secrets.Set(user, secret); err != nil {
+					a.ui.Println("[E2EE] Error saving secret:", err)
+					continue
 				}
 			}
 
@@ -114,6 +118,10 @@ func (a *App) RunMainMenu() {
 		// Accept chat request
 		case strings.HasPrefix(line, "/accept "):
 			user := strings.TrimSpace(strings.TrimPrefix(line, "/accept "))
+			if user == "" {
+				a.ui.Println("Usage: /accept <user>")
+				continue
+			}
 
 			if a.chatState.Active {
 				a.ui.Println("[CHAT] Już jesteś w czacie — nie możesz zaakceptować nowego.")
@@ -125,25 +133,21 @@ func (a *App) RunMainMenu() {
 			}
 
 			// Ensure E2EE secret for this peer before accepting.
-			if !a.chatState.SecretEstablished {
-				if secret, ok := a.secrets.Get(user); ok {
-					if err := a.client.SetSharedSecretForPeer(user, secret); err != nil {
-						a.ui.Println("[E2EE] Error deriving keys from stored secret:", err)
-						continue
-					}
-					a.chatState.SetSecretEstablished(true)
-					a.ui.Printf("[E2EE] Loaded stored shared secret for %s.\n", user)
-				} else {
-					secret := a.ui.ReadSharedSecret()
-					if err := a.client.SetSharedSecretForPeer(user, secret); err != nil {
-						a.ui.Println("[E2EE] Error deriving keys:", err)
-						continue
-					}
-					if err := a.secrets.Set(user, secret); err != nil {
-						a.ui.Println("[E2EE] Error saving secret:", err)
-						continue
-					}
-					a.chatState.SetSecretEstablished(true)
+			if secret, ok := a.secrets.Get(user); ok {
+				if err := a.client.SetSharedSecretForPeer(user, secret); err != nil {
+					a.ui.Println("[E2EE] Error deriving keys from stored secret:", err)
+					continue
+				}
+				a.ui.Printf("[E2EE] Loaded stored shared secret for %s.\n", user)
+			} else {
+				secret := a.ui.ReadSharedSecret()
+				if err := a.client.SetSharedSecretForPeer(user, secret); err != nil {
+					a.ui.Println("[E2EE] Error deriving keys:", err)
+					continue
+				}
+				if err := a.secrets.Set(user, secret); err != nil {
+					a.ui.Println("[E2EE] Error saving secret:", err)
+					continue
 				}
 			}
 
@@ -156,6 +160,10 @@ func (a *App) RunMainMenu() {
 		// Refuse chat request
 		case strings.HasPrefix(line, "/refuse "):
 			user := strings.TrimSpace(strings.TrimPrefix(line, "/refuse "))
+			if user == "" {
+				a.ui.Println("Usage: /refuse <user>")
+				continue
+			}
 
 			if a.chatState.Active {
 				a.ui.Println("[CHAT] Jesteś w czacie — nie możesz odrzucać requestów.")
@@ -207,7 +215,6 @@ func (a *App) RunMainMenu() {
 	}
 }
 
-// printMenu prints the list of available commands.
 func (a *App) printMenu() {
 	a.ui.Println("Dostępne komendy:")
 	a.ui.Println("  /status <user>")

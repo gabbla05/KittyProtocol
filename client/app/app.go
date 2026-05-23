@@ -4,8 +4,6 @@ import (
 	"github.com/gabbla05/KittyProtocol/client/api"
 )
 
-// UI defines the minimal interface required by the App layer.
-// It allows plugging in different frontends (CLI, GUI, tests).
 type UI interface {
 	ReadLine() string
 	ReadSharedSecret() []byte
@@ -13,8 +11,6 @@ type UI interface {
 	Printf(format string, v ...any)
 }
 
-// App coordinates user interaction (UI) with the KittyClient API.
-// It contains no networking or cryptography — only application logic.
 type App struct {
 	client       *api.KittyClient
 	ui           UI
@@ -23,19 +19,23 @@ type App struct {
 	secrets      *SecretStore
 }
 
-// NewApp creates a new application controller and initializes the secret store.
-//
-// The secret store is responsible for persisting per-peer shared secrets
-// to a local file (e.g. ~/.kitty/secrets.json).
 func NewApp(c *api.KittyClient, ui UI, disconnected <-chan struct{}) *App {
-	storePath := defaultSecretStorePath()
-	secretStore := NewSecretStore(storePath)
-
 	return &App{
 		client:       c,
 		ui:           ui,
 		disconnected: disconnected,
 		chatState:    NewChatState(),
-		secrets:      secretStore,
+		secrets:      nil, // initialized after AUTH
+	}
+}
+
+// InitSecretStoreForUser must be called AFTER successful AUTH.
+func (a *App) InitSecretStoreForUser(username string) {
+	path := PathForUser(username)
+	a.secrets = NewSecretStore(path)
+
+	// Auto-load all secrets into KittyClient
+	for peer, secret := range a.secrets.All() {
+		_ = a.client.SetSharedSecretForPeer(peer, secret)
 	}
 }

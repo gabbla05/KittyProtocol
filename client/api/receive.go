@@ -8,27 +8,20 @@ import (
 	"github.com/gabbla05/KittyProtocol/protocol"
 )
 
-// StartReceiverLoop starts a background goroutine that continuously reads
-// frames from the QUIC stream. This is the only reader for the stream;
-// all other components must communicate via higher-level APIs.
-// It handles:
-//
-//   - MEOW_OK      → delivery acknowledgments,
-//   - ERROR        → server-side errors,
-//   - DATA         → encrypted application messages,
-//   - STATUS_RES   → presence responses.
+// StartReceiverLoop launches a background goroutine responsible for reading
+// all incoming frames from the QUIC stream. This is the only reader for the
+// stream; all other components must communicate through higher‑level APIs.
 //
 // The loop terminates when:
-//   - stopRecv is closed via KittyClient.Close(),
-//   - reading from the stream returns an error,
-//   - the disconnected channel is closed (it is then closed here exactly once).
+//   - stopRecv is closed,
+//   - the QUIC stream returns an error,
+//   - the disconnected channel is closed (exactly once).
 func (c *KittyClient) StartReceiverLoop(disconnected chan struct{}) {
 	c.mu.Lock()
 	stream := c.stream
 	replay := c.replay
 	ackMgr := c.ackMgr
 	stopRecv := c.stopRecv
-	handler := c.appHandler
 	c.mu.Unlock()
 
 	if stream == nil {
@@ -50,10 +43,8 @@ func (c *KittyClient) StartReceiverLoop(disconnected chan struct{}) {
 				fmt.Println("\n[Client: Receive] Connection closed by server:", err)
 				fmt.Println("[Client: Receive] Returning to disconnected state.")
 
-				// signal application layer exactly once
 				select {
 				case <-disconnected:
-					// already closed
 				default:
 					close(disconnected)
 				}
@@ -67,6 +58,7 @@ func (c *KittyClient) StartReceiverLoop(disconnected chan struct{}) {
 			}
 
 			switch typeName {
+
 			case "MEOW_OK":
 				if ackMgr != nil {
 					ackMgr.NotifyDelivered(msgID)
@@ -75,10 +67,8 @@ func (c *KittyClient) StartReceiverLoop(disconnected chan struct{}) {
 			case "ERROR":
 				var errFrame protocol.ErrorFrame
 				if json.Unmarshal(buf[:n], &errFrame) == nil {
-					fmt.Printf("\n[Client: Receive] Server ERROR %s: %s\n> ", errFrame.Code, errFrame.Desc)
-					if errFrame.Code == "ERR_15" {
-						fmt.Println("[Client: Receive] Receiver is offline. Messages will not be delivered.")
-					}
+					fmt.Printf("\n[Client: Receive] Server ERROR %s: %s\n> ",
+						errFrame.Code, errFrame.Desc)
 				} else {
 					fmt.Println("\n[Client: Receive] Failed to parse ERROR frame\n> ")
 				}
@@ -90,21 +80,39 @@ func (c *KittyClient) StartReceiverLoop(disconnected chan struct{}) {
 					continue
 				}
 
-				// Client-side replay protection (silent drop)
+				// Replay protection
 				if replay != nil && replay.MarkAndCheck(df.MsgID) {
 					continue
 				}
 
-				// Select keys based on logical sender.
-				kEnc, kMac, ok := c.getKeysForPeer(df.Sender)
+				// Retrieve handler + keys
+				c.mu.Lock()
+				handler := c.appHandler
+
+				var (
+					kEnc []byte
+					kMac []byte
+					ok   bool
+				)
+				if c.peerKeys != nil {
+					pk, exists := c.peerKeys[df.Sender]
+					if exists {
+						kEnc = pk.kEnc
+						kMac = pk.kMac
+						ok = true
+					}
+				}
+				c.mu.Unlock()
+
 				if !ok {
-					fmt.Printf("\n[Client] No shared secret for sender %s — cannot decrypt.\n> ", df.Sender)
+					fmt.Printf("\n[Client] No shared secret for sender %s — cannot decrypt.\n> ",
+						df.Sender)
 					continue
 				}
 
 				plaintext, err := cryptoee.DecryptAndVerifyWithKeys(
 					df.MsgID,
-					df.Target, // associated data: logical target of the message
+					df.Target,
 					df.Payload,
 					df.MAC,
 					kEnc,
@@ -118,7 +126,8 @@ func (c *KittyClient) StartReceiverLoop(disconnected chan struct{}) {
 				if handler != nil {
 					handler(df.Sender, []byte(plaintext))
 				} else {
-					fmt.Printf("\n[Client: Receive] Message from %s: %s\n> ", df.Sender, string(plaintext))
+					fmt.Printf("\n[Client: Receive] Message from %s: %s\n> ",
+						df.Sender, string(plaintext))
 				}
 
 			case "STATUS_RES":

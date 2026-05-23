@@ -2,34 +2,27 @@ package app
 
 import "sync"
 
-// ChatState holds the local chat session state for a single client.
-// It is completely independent from the transport layer and protocol details.
+// ChatState holds the current chat state on the client side.
+// It is fully independent from the transport layer.
 type ChatState struct {
 	mu sync.Mutex
 
-	// Active indicates whether a chat session is currently active
-	// (after a successful CHAT_ACCEPT exchange).
+	// Whether a chat session is currently active (after CHAT_ACCEPT).
 	Active bool
 
-	// ActiveTarget is the username of the peer we are currently chatting with.
+	// Logical username of the current chat peer.
 	ActiveTarget string
 
-	// PendingRequestFrom holds the username of a peer who sent us a CHAT_REQUEST
-	// that has not yet been accepted or refused.
+	// If someone sent us a CHAT_REQUEST, this stores the sender username.
 	PendingRequestFrom string
-
-	// SecretEstablished indicates whether an E2EE shared secret has been
-	// configured for the current peer (according to the UI flow).
-	SecretEstablished bool
 }
 
-// NewChatState creates an empty chat state instance.
+// NewChatState creates an empty chat state.
 func NewChatState() *ChatState {
 	return &ChatState{}
 }
 
-// SetActive marks the chat as active with the given target and clears any
-// pending incoming request.
+// SetActive marks a chat as active with the given target.
 func (s *ChatState) SetActive(target string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -39,7 +32,7 @@ func (s *ChatState) SetActive(target string) {
 	s.PendingRequestFrom = ""
 }
 
-// SetPendingRequest records an incoming CHAT_REQUEST from the given user.
+// SetPendingRequest records an incoming chat request.
 func (s *ChatState) SetPendingRequest(from string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -47,7 +40,7 @@ func (s *ChatState) SetPendingRequest(from string) {
 	s.PendingRequestFrom = from
 }
 
-// ClearPendingRequest clears any pending CHAT_REQUEST information.
+// ClearPendingRequest clears any pending chat request.
 func (s *ChatState) ClearPendingRequest() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -55,7 +48,7 @@ func (s *ChatState) ClearPendingRequest() {
 	s.PendingRequestFrom = ""
 }
 
-// EndChat resets the active chat state and clears any pending request.
+// EndChat ends the current chat and clears state.
 func (s *ChatState) EndChat() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -63,12 +56,4 @@ func (s *ChatState) EndChat() {
 	s.Active = false
 	s.ActiveTarget = ""
 	s.PendingRequestFrom = ""
-}
-
-// SetSecretEstablished updates the E2EE secret flag for the current context.
-func (s *ChatState) SetSecretEstablished(v bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.SecretEstablished = v
 }
