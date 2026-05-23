@@ -5,7 +5,8 @@ import (
 	"time"
 )
 
-// Test that limiter allows up to N operations immediately.
+// TestRateLimiterInitialTokens verifies that a new limiter starts with
+// maxTokens available and allows exactly that many operations.
 func TestRateLimiterInitialTokens(t *testing.T) {
 	rl := NewRateLimiter(10)
 
@@ -16,11 +17,12 @@ func TestRateLimiterInitialTokens(t *testing.T) {
 	}
 
 	if rl.Allow() {
-		t.Fatalf("expected limiter to block after tokens exhausted")
+		t.Fatalf("expected limiter to block after tokens are exhausted")
 	}
 }
 
-// Test that tokens refill over time.
+// TestRateLimiterRefill ensures that tokens are refilled proportionally
+// to elapsed time since the last Allow() call.
 func TestRateLimiterRefill(t *testing.T) {
 	rl := NewRateLimiter(10)
 
@@ -33,10 +35,10 @@ func TestRateLimiterRefill(t *testing.T) {
 		t.Fatalf("expected limiter to block after exhaustion")
 	}
 
-	// Wait long enough for refill
+	// Wait long enough for at least one token to refill
 	time.Sleep(150 * time.Millisecond)
 
 	if !rl.Allow() {
-		t.Fatalf("expected limiter to refill tokens after time")
+		t.Fatalf("expected limiter to allow after refill")
 	}
 }

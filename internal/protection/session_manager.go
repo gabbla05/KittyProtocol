@@ -6,17 +6,15 @@ import (
 	"time"
 )
 
-const (
-	DefaultSessionIdleTimeout     = 60 * time.Second
-	DefaultSessionCleanupInterval = 10 * time.Second
-)
-
+// SessionManager manages all active sessions in memory.
+// It periodically scans for idle sessions and closes them.
 type SessionManager struct {
 	sessions map[string]*Session
 	mu       sync.RWMutex
 	stopChan chan struct{}
 }
 
+// NewSessionManager creates a new SessionManager and starts the idle cleaner.
 func NewSessionManager() *SessionManager {
 	sm := &SessionManager{
 		sessions: make(map[string]*Session),
@@ -26,6 +24,7 @@ func NewSessionManager() *SessionManager {
 	return sm
 }
 
+// Stop terminates the background cleaner goroutine.
 func (sm *SessionManager) Stop() {
 	close(sm.stopChan)
 }
@@ -63,7 +62,7 @@ func (sm *SessionManager) startCleaner(interval, idleTimeout time.Duration) {
 			sm.mu.Lock()
 			for user, sess := range sm.sessions {
 				if time.Since(sess.LastActive) > idleTimeout {
-					fmt.Printf("[SessionManager: Protection] Idle Timeout: %s. Removing session.\n", user)
+					fmt.Printf("[SessionManager] Idle Timeout: %s. Removing session.\n", user)
 					if sess.CloseFunc != nil {
 						sess.CloseFunc()
 					}
@@ -75,6 +74,7 @@ func (sm *SessionManager) startCleaner(interval, idleTimeout time.Duration) {
 	}
 }
 
+// IsOnline returns true if the user currently has an active session.
 func (sm *SessionManager) IsOnline(user string) bool {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()

@@ -5,68 +5,63 @@ import (
 	"time"
 )
 
+// TestReplayDetector_FirstSeenIsNotReplay verifies that the first occurrence
+// of a message ID is never treated as a replay.
 func TestReplayDetector_FirstSeenIsNotReplay(t *testing.T) {
 	r := NewReplayDetector()
 	id := int64(123)
 
 	if replay := r.MarkAndCheck(id); replay {
-		t.Fatalf("first time msgID=%d should NOT be replay", id)
+		t.Fatalf("first occurrence of msgID=%d should NOT be replay", id)
 	}
 }
 
+// TestReplayDetector_SecondSeenIsReplay ensures that re-sending the same
+// message ID within the TTL window is detected as a replay.
 func TestReplayDetector_SecondSeenIsReplay(t *testing.T) {
 	r := NewReplayDetector()
 	id := int64(123)
 
-	if replay := r.MarkAndCheck(id); replay {
-		t.Fatalf("first time msgID=%d should NOT be replay", id)
-	}
+	r.MarkAndCheck(id)
 	if replay := r.MarkAndCheck(id); !replay {
-		t.Fatalf("second time msgID=%d SHOULD be replay", id)
+		t.Fatalf("second occurrence of msgID=%d SHOULD be replay", id)
 	}
 }
 
+// TestReplayDetector_TTLExpires verifies that replay entries expire after TTL.
 func TestReplayDetector_TTLExpires(t *testing.T) {
 	r := NewReplayDetector()
 	id := int64(123)
 
-	// First time → not replay
-	if replay := r.MarkAndCheck(id); replay {
-		t.Fatalf("first time should NOT be replay")
-	}
+	r.MarkAndCheck(id)
+	r.MarkAndCheck(id)
 
-	// Second time immediately → replay
-	if replay := r.MarkAndCheck(id); !replay {
-		t.Fatalf("second time SHOULD be replay")
-	}
-
-	// --- symulacja upływu czasu ---
+	// Simulate TTL expiration
 	r.mu.Lock()
-	r.seen[id] = time.Now().Add(-replayTTL - time.Second)
+	r.seen[id] = time.Now().Add(-ReplayTTL - time.Second)
 	r.mu.Unlock()
 
-	// Now TTL expired → should NOT be replay
 	if replay := r.MarkAndCheck(id); replay {
-		t.Fatalf("after TTL msgID should NOT be replay")
+		t.Fatalf("msgID should NOT be replay after TTL expiration")
 	}
 }
 
+// TestReplayDetector_SweepRemovesOldEntries ensures that periodic sweeping
+// removes expired entries.
 func TestReplayDetector_SweepRemovesOldEntries(t *testing.T) {
 	r := NewReplayDetector()
 
 	oldID := int64(1)
 	newID := int64(2)
 
-	// Insert old entry
 	r.MarkAndCheck(oldID)
 
-	// Cofamy czas starego wpisu
+	// Simulate old timestamp + force sweep
 	r.mu.Lock()
-	r.seen[oldID] = time.Now().Add(-replayTTL - time.Second)
-	r.lastSweep = time.Now().Add(-replaySweepInterval - time.Second)
+	r.seen[oldID] = time.Now().Add(-ReplayTTL - time.Second)
+	r.lastSweep = time.Now().Add(-ReplaySweepInterval - time.Second)
 	r.mu.Unlock()
 
-	// Trigger sweep
 	r.MarkAndCheck(newID)
 
 	r.mu.Lock()
@@ -74,30 +69,30 @@ func TestReplayDetector_SweepRemovesOldEntries(t *testing.T) {
 	r.mu.Unlock()
 
 	if exists {
-		t.Fatalf("old entry should have been swept out")
+		t.Fatalf("expired entry should have been removed during sweep")
 	}
 }
 
+// TestReplayDetector_MaxEntriesLimit ensures that the detector never grows
+// beyond MaxReplayEntries.
 func TestReplayDetector_MaxEntriesLimit(t *testing.T) {
 	r := NewReplayDetector()
 
-	// Wypełniamy mapę do limitu
-	for i := 0; i < maxReplayEntries; i++ {
+	for i := 0; i < MaxReplayEntries; i++ {
 		r.MarkAndCheck(int64(i))
 	}
 
-	// Cofamy czas części wpisów, aby mogły zostać usunięte
+	// Simulate all entries being old
 	r.mu.Lock()
-	cutoff := time.Now().Add(-replayTTL - time.Second)
+	cutoff := time.Now().Add(-ReplayTTL - time.Second)
 	for id := range r.seen {
 		r.seen[id] = cutoff
 	}
 	r.mu.Unlock()
 
-	// Dodanie nowego wpisu powinno wywołać cleanup
 	r.MarkAndCheck(999999)
 
-	if len(r.seen) > maxReplayEntries {
-		t.Fatalf("map should not exceed maxReplayEntries after cleanup")
+	if len(r.seen) > MaxReplayEntries {
+		t.Fatalf("ReplayDetector should not exceed MaxReplayEntries")
 	}
 }
