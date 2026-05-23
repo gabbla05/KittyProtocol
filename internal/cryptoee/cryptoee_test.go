@@ -1,170 +1,215 @@
 package cryptoee
 
-// import (
-// 	"bytes"
-// 	"encoding/base64"
-// 	"testing"
-// )
+import (
+	"bytes"
+	"encoding/base64"
+	"testing"
+)
 
-// func TestEncryptDecrypt(t *testing.T) {
-// 	msgID := int64(123456789)
-// 	target := "bob"
-// 	plaintext := "Hello Bob, this is a secret message."
+// --- Helpers ---
 
-// 	payload, mac, err := EncryptAndMAC(msgID, target, plaintext)
-// 	if err != nil {
-// 		t.Fatalf("EncryptAndMAC failed: %v", err)
-// 	}
+func mustKeys(t *testing.T) ([]byte, []byte) {
+	secret := []byte("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA") // 32 bytes
+	kEnc, kMac, err := DeriveKeysFromSecret(secret)
+	if err != nil {
+		t.Fatalf("DeriveKeysFromSecret failed: %v", err)
+	}
+	return kEnc, kMac
+}
 
-// 	out, err := DecryptAndVerify(msgID, target, payload, mac)
-// 	if err != nil {
-// 		t.Fatalf("DecryptAndVerify failed: %v", err)
-// 	}
+// --- Core encryption/decryption tests ---
 
-// 	if out != plaintext {
-// 		t.Fatalf("Decrypted plaintext mismatch.\nExpected: %s\nGot: %s", plaintext, out)
-// 	}
-// }
+func TestEncryptDecryptRoundtrip(t *testing.T) {
+	kEnc, kMac := mustKeys(t)
 
-// func TestTamperedCiphertext(t *testing.T) {
-// 	msgID := int64(42)
-// 	target := "bob"
-// 	plaintext := "Secret"
+	msgID := int64(123456)
+	target := "Bob"
+	plaintext := "Hello Bob, this is a secret message."
 
-// 	payload, mac, err := EncryptAndMAC(msgID, target, plaintext)
-// 	if err != nil {
-// 		t.Fatalf("EncryptAndMAC failed: %v", err)
-// 	}
+	payload, mac, err := EncryptAndMACWithKeys(msgID, target, plaintext, kEnc, kMac)
+	if err != nil {
+		t.Fatalf("Encrypt failed: %v", err)
+	}
 
-// 	// Tamper with payload
-// 	payloadBytes := []byte(payload)
-// 	payloadBytes[len(payloadBytes)-1] ^= 0xFF
-// 	tampered := string(payloadBytes)
+	out, err := DecryptAndVerifyWithKeys(msgID, target, payload, mac, kEnc, kMac)
+	if err != nil {
+		t.Fatalf("Decrypt failed: %v", err)
+	}
 
-// 	_, err = DecryptAndVerify(msgID, target, tampered, mac)
-// 	if err == nil {
-// 		t.Fatalf("Expected decryption failure after tampering, got nil error")
-// 	}
-// }
+	if out != plaintext {
+		t.Fatalf("plaintext mismatch: expected %q, got %q", plaintext, out)
+	}
+}
 
-// func TestTamperedMAC(t *testing.T) {
-// 	msgID := int64(42)
-// 	target := "bob"
-// 	plaintext := "Secret"
+// --- Tampering tests ---
 
-// 	payload, mac, err := EncryptAndMAC(msgID, target, plaintext)
-// 	if err != nil {
-// 		t.Fatalf("EncryptAndMAC failed: %v", err)
-// 	}
+func TestTamperedCiphertext(t *testing.T) {
+	kEnc, kMac := mustKeys(t)
 
-// 	// Tamper with MAC
-// 	macBytes := []byte(mac)
-// 	macBytes[0] ^= 0xAA
-// 	tamperedMAC := string(macBytes)
+	msgID := int64(42)
+	target := "bob"
+	plaintext := "Secret"
 
-// 	_, err = DecryptAndVerify(msgID, target, payload, tamperedMAC)
-// 	if err == nil {
-// 		t.Fatalf("Expected HMAC verification failure, got nil error")
-// 	}
-// }
+	payload, mac, err := EncryptAndMACWithKeys(msgID, target, plaintext, kEnc, kMac)
+	if err != nil {
+		t.Fatalf("Encrypt failed: %v", err)
+	}
 
-// func TestWrongMsgID(t *testing.T) {
-// 	msgID := int64(100)
-// 	target := "bob"
-// 	plaintext := "Hello"
+	// Tamper payload
+	raw, _ := base64.StdEncoding.DecodeString(payload)
+	raw[len(raw)-1] ^= 0xFF
+	tampered := base64.StdEncoding.EncodeToString(raw)
 
-// 	payload, mac, err := EncryptAndMAC(msgID, target, plaintext)
-// 	if err != nil {
-// 		t.Fatalf("EncryptAndMAC failed: %v", err)
-// 	}
+	_, err = DecryptAndVerifyWithKeys(msgID, target, tampered, mac, kEnc, kMac)
+	if err == nil {
+		t.Fatalf("expected decryption failure after tampering")
+	}
+}
 
-// 	// używamy innego msgID przy deszyfrowaniu
-// 	_, err = DecryptAndVerify(msgID+1, target, payload, mac)
-// 	if err == nil {
-// 		t.Fatalf("Expected HMAC failure for wrong msgID")
-// 	}
-// }
+func TestTamperedMAC(t *testing.T) {
+	kEnc, kMac := mustKeys(t)
 
-// func TestWrongTarget(t *testing.T) {
-// 	msgID := int64(200)
-// 	target := "bob"
-// 	plaintext := "Hello"
+	msgID := int64(42)
+	target := "bob"
+	plaintext := "Secret"
 
-// 	payload, mac, err := EncryptAndMAC(msgID, target, plaintext)
-// 	if err != nil {
-// 		t.Fatalf("EncryptAndMAC failed: %v", err)
-// 	}
+	payload, mac, err := EncryptAndMACWithKeys(msgID, target, plaintext, kEnc, kMac)
+	if err != nil {
+		t.Fatalf("Encrypt failed: %v", err)
+	}
 
-// 	// zmieniamy target przy deszyfrowaniu
-// 	_, err = DecryptAndVerify(msgID, "alice", payload, mac)
-// 	if err == nil {
-// 		t.Fatalf("Expected HMAC failure for wrong target")
-// 	}
-// }
+	// Tamper MAC
+	raw, _ := base64.StdEncoding.DecodeString(mac)
+	raw[0] ^= 0xAA
+	tampered := base64.StdEncoding.EncodeToString(raw)
 
-// func TestPayloadTooShort(t *testing.T) {
-// 	msgID := int64(300)
-// 	target := "bob"
+	_, err = DecryptAndVerifyWithKeys(msgID, target, payload, tampered, kEnc, kMac)
+	if err == nil {
+		t.Fatalf("expected HMAC verification failure")
+	}
+}
 
-// 	// payload krótszy niż nonce
-// 	shortPayload := base64.StdEncoding.EncodeToString([]byte{1, 2, 3})
+// --- Wrong msgID / wrong target ---
 
-// 	_, err := DecryptAndVerify(msgID, target, shortPayload, "AAAA")
-// 	if err == nil {
-// 		t.Fatalf("Expected error for too short payload")
-// 	}
-// }
+func TestWrongMsgID(t *testing.T) {
+	kEnc, kMac := mustKeys(t)
 
-// func TestInvalidBase64Payload(t *testing.T) {
-// 	msgID := int64(400)
-// 	target := "bob"
+	msgID := int64(100)
+	target := "bob"
+	plaintext := "Hello"
 
-// 	_, err := DecryptAndVerify(msgID, target, "!!!notbase64!!!", "AAAA")
-// 	if err == nil {
-// 		t.Fatalf("Expected base64 decode error")
-// 	}
-// }
+	payload, mac, err := EncryptAndMACWithKeys(msgID, target, plaintext, kEnc, kMac)
+	if err != nil {
+		t.Fatalf("Encrypt failed: %v", err)
+	}
 
-// func TestInvalidBase64MAC(t *testing.T) {
-// 	msgID := int64(500)
-// 	target := "bob"
+	_, err = DecryptAndVerifyWithKeys(msgID+1, target, payload, mac, kEnc, kMac)
+	if err == nil {
+		t.Fatalf("expected HMAC failure for wrong msgID")
+	}
+}
 
-// 	payload, _, err := EncryptAndMAC(msgID, target, "Hello")
-// 	if err != nil {
-// 		t.Fatalf("EncryptAndMAC failed: %v", err)
-// 	}
+func TestWrongTarget(t *testing.T) {
+	kEnc, kMac := mustKeys(t)
 
-// 	_, err = DecryptAndVerify(msgID, target, payload, "!!!notbase64!!!")
-// 	if err == nil {
-// 		t.Fatalf("Expected base64 decode error for MAC")
-// 	}
-// }
+	msgID := int64(200)
+	target := "bob"
+	plaintext := "Hello"
 
-// func TestDeriveKeysDeterministic(t *testing.T) {
-// 	k1Enc, k1Mac, err := DeriveKeys()
-// 	if err != nil {
-// 		t.Fatalf("DeriveKeys failed: %v", err)
-// 	}
+	payload, mac, err := EncryptAndMACWithKeys(msgID, target, plaintext, kEnc, kMac)
+	if err != nil {
+		t.Fatalf("Encrypt failed: %v", err)
+	}
 
-// 	k2Enc, k2Mac, err := DeriveKeys()
-// 	if err != nil {
-// 		t.Fatalf("DeriveKeys failed: %v", err)
-// 	}
+	_, err = DecryptAndVerifyWithKeys(msgID, "alice", payload, mac, kEnc, kMac)
+	if err == nil {
+		t.Fatalf("expected HMAC failure for wrong target")
+	}
+}
 
-// 	if !bytes.Equal(k1Enc, k2Enc) || !bytes.Equal(k1Mac, k2Mac) {
-// 		t.Fatalf("DeriveKeys must be deterministic for static secret")
-// 	}
-// }
+// --- Base64 / payload errors ---
 
-// func TestDeriveKeysFromSecret(t *testing.T) {
-// 	secret := []byte("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA") // 32 bytes
+func TestPayloadTooShort(t *testing.T) {
+	kEnc, kMac := mustKeys(t)
 
-// 	kEnc, kMac, err := DeriveKeysFromSecret(secret)
-// 	if err != nil {
-// 		t.Fatalf("DeriveKeysFromSecret failed: %v", err)
-// 	}
+	msgID := int64(300)
+	target := "bob"
 
-// 	if len(kEnc) != KeySizeBytes || len(kMac) != KeySizeBytes {
-// 		t.Fatalf("Derived keys must be %d bytes", KeySizeBytes)
-// 	}
-// }
+	shortPayload := base64.StdEncoding.EncodeToString([]byte{1, 2, 3})
+
+	_, err := DecryptAndVerifyWithKeys(msgID, target, shortPayload, "AAAA", kEnc, kMac)
+	if err == nil {
+		t.Fatalf("expected error for too short payload")
+	}
+}
+
+func TestInvalidBase64Payload(t *testing.T) {
+	kEnc, kMac := mustKeys(t)
+
+	msgID := int64(400)
+	target := "bob"
+
+	_, err := DecryptAndVerifyWithKeys(msgID, target, "!!!notbase64!!!", "AAAA", kEnc, kMac)
+	if err == nil {
+		t.Fatalf("expected base64 decode error")
+	}
+}
+
+func TestInvalidBase64MAC(t *testing.T) {
+	kEnc, kMac := mustKeys(t)
+
+	msgID := int64(500)
+	target := "bob"
+
+	payload, _, err := EncryptAndMACWithKeys(msgID, target, "Hello", kEnc, kMac)
+	if err != nil {
+		t.Fatalf("Encrypt failed: %v", err)
+	}
+
+	_, err = DecryptAndVerifyWithKeys(msgID, target, payload, "!!!notbase64!!!", kEnc, kMac)
+	if err == nil {
+		t.Fatalf("expected base64 decode error for MAC")
+	}
+}
+
+// --- HKDF tests ---
+
+func TestDeriveKeysDeterministic(t *testing.T) {
+	secret := []byte("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+
+	k1Enc, k1Mac, err := DeriveKeysFromSecret(secret)
+	if err != nil {
+		t.Fatalf("DeriveKeysFromSecret failed: %v", err)
+	}
+
+	k2Enc, k2Mac, err := DeriveKeysFromSecret(secret)
+	if err != nil {
+		t.Fatalf("DeriveKeysFromSecret failed: %v", err)
+	}
+
+	if !bytes.Equal(k1Enc, k2Enc) || !bytes.Equal(k1Mac, k2Mac) {
+		t.Fatalf("HKDF must be deterministic for same secret")
+	}
+}
+
+func TestCanonicalization(t *testing.T) {
+	kEnc, kMac := mustKeys(t)
+
+	msgID := int64(600)
+	plaintext := "Hello"
+
+	// Different forms of same target
+	payload1, mac1, _ := EncryptAndMACWithKeys(msgID, " Bob ", plaintext, kEnc, kMac)
+	payload2, mac2, _ := EncryptAndMACWithKeys(msgID, "bob", plaintext, kEnc, kMac)
+
+	if payload1 == payload2 && mac1 == mac2 {
+		// This is OK — canonicalization makes them equivalent
+		return
+	}
+
+	// But decryption must work for both
+	_, err := DecryptAndVerifyWithKeys(msgID, "bob", payload1, mac1, kEnc, kMac)
+	if err != nil {
+		t.Fatalf("canonicalization failed: %v", err)
+	}
+}
