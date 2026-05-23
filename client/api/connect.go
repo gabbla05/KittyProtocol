@@ -37,29 +37,16 @@ func (c *KittyClient) Connect(hubAddr string) error {
 
 	tlsConf := buildTLSConfig()
 
-	// QUIC Dial
+	// QUIC Dial (TLS 1.3 + TOFU via VerifyConnection in tlsConf)
 	conn, err := quic.DialAddr(context.Background(), hubAddr, tlsConf, nil)
 	if err != nil {
-		return err
-	}
-
-	// TOFU certificate verification
-	state := conn.ConnectionState()
-	if len(state.TLS.PeerCertificates) == 0 {
-		conn.CloseWithError(0, "no server certificate")
-		return errors.New("no server certificate")
-	}
-
-	serverCert := state.TLS.PeerCertificates[0]
-	if err := verifyOrStoreServerCert(serverCert); err != nil {
-		conn.CloseWithError(0, "certificate verification failed")
 		return err
 	}
 
 	// Open QUIC stream
 	stream, err := conn.OpenStreamSync(context.Background())
 	if err != nil {
-		conn.CloseWithError(0, "stream open failed")
+		_ = conn.CloseWithError(0, "stream open failed")
 		return err
 	}
 

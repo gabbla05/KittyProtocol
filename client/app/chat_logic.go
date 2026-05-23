@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 func (a *App) StartChatRequest(target string) error {
@@ -57,6 +58,9 @@ func (a *App) SendTextMessage(text string) error {
 }
 
 func (a *App) sendAppFrame(frame ChatFrame) error {
+	// Canonicalize target to match transport‑layer expectations
+	frame.To = strings.ToLower(strings.TrimSpace(frame.To))
+
 	data, err := json.Marshal(frame)
 	if err != nil {
 		return fmt.Errorf("marshal chat frame: %w", err)

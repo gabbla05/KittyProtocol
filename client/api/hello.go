@@ -45,6 +45,10 @@ func (c *KittyClient) waitHelloOK() (bool, string) {
 	stream := c.stream
 	c.mu.Unlock()
 
+	if stream == nil {
+		return false, "NO_STREAM"
+	}
+
 	buf := make([]byte, 4096)
 	n, err := stream.Read(buf)
 	if err != nil {
@@ -57,14 +61,14 @@ func (c *KittyClient) waitHelloOK() (bool, string) {
 	}
 
 	switch typeName {
-	case "ERROR":
+	case protocol.FrameTypeError:
 		var errFrame protocol.ErrorFrame
 		if json.Unmarshal(buf[:n], &errFrame) == nil {
 			return false, errFrame.Code
 		}
 		return false, "PARSE_ERROR"
 
-	case "MEOW_OK":
+	case protocol.FrameTypeMeowOK:
 		var okFrame protocol.MeowOkFrame
 		if json.Unmarshal(buf[:n], &okFrame) != nil {
 			return false, "PARSE_ERROR"

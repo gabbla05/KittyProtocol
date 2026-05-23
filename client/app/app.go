@@ -39,3 +39,15 @@ func (a *App) InitSecretStoreForUser(username string) {
 		_ = a.client.SetSharedSecretForPeer(peer, secret)
 	}
 }
+
+func (a *App) Client() *api.KittyClient {
+	return a.client
+}
+
+func (a *App) Secrets() *SecretStore {
+	return a.secrets
+}
+
+func (a *App) Disconnected() <-chan struct{} {
+	return a.disconnected
+}

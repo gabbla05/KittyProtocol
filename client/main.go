@@ -76,7 +76,7 @@ func main() {
 	client.StartPingLoop()
 
 	// 9. Main workflow
-	application.RunMainMenu()
+	ui.RunMainMenu(application)
 
 	// 10. Cleanup
 	client.Close()

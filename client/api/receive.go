@@ -59,12 +59,12 @@ func (c *KittyClient) StartReceiverLoop(disconnected chan struct{}) {
 
 			switch typeName {
 
-			case "MEOW_OK":
+			case protocol.FrameTypeMeowOK:
 				if ackMgr != nil {
 					ackMgr.NotifyDelivered(msgID)
 				}
 
-			case "ERROR":
+			case protocol.FrameTypeError:
 				var errFrame protocol.ErrorFrame
 				if json.Unmarshal(buf[:n], &errFrame) == nil {
 					fmt.Printf("\n[Client: Receive] Server ERROR %s: %s\n> ",
@@ -73,7 +73,7 @@ func (c *KittyClient) StartReceiverLoop(disconnected chan struct{}) {
 					fmt.Println("\n[Client: Receive] Failed to parse ERROR frame\n> ")
 				}
 
-			case "DATA":
+			case protocol.FrameTypeData:
 				var df protocol.DataFrame
 				if json.Unmarshal(buf[:n], &df) != nil {
 					fmt.Println("\n[Client: Receive] Failed to parse DATA frame\n> ")
@@ -88,20 +88,7 @@ func (c *KittyClient) StartReceiverLoop(disconnected chan struct{}) {
 				// Retrieve handler + keys
 				c.mu.Lock()
 				handler := c.appHandler
-
-				var (
-					kEnc []byte
-					kMac []byte
-					ok   bool
-				)
-				if c.peerKeys != nil {
-					pk, exists := c.peerKeys[df.Sender]
-					if exists {
-						kEnc = pk.kEnc
-						kMac = pk.kMac
-						ok = true
-					}
-				}
+				kEnc, kMac, ok := c.getKeysForPeer(df.Sender)
 				c.mu.Unlock()
 
 				if !ok {
@@ -130,7 +117,7 @@ func (c *KittyClient) StartReceiverLoop(disconnected chan struct{}) {
 						df.Sender, string(plaintext))
 				}
 
-			case "STATUS_RES":
+			case protocol.FrameTypeStatusRes:
 				var sf protocol.StatusResFrame
 				if json.Unmarshal(buf[:n], &sf) != nil {
 					fmt.Println("\n[Client: Receive] Failed to parse STATUS_RES frame\n> ")

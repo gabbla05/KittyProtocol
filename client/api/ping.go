@@ -23,7 +23,7 @@ func (c *KittyClient) StartPingLoop() {
 	stop := c.stopPing
 	c.mu.Unlock()
 
-	if stream == nil {
+	if stream == nil || stop == nil {
 		return
 	}
 
@@ -47,7 +47,7 @@ func (c *KittyClient) StartPingLoop() {
 
 				frame := protocol.PingFrame{
 					BaseFrame: protocol.BaseFrame{
-						Type:  "PING",
+						Type:  protocol.FrameTypePing,
 						MsgID: time.Now().UnixMilli(),
 					},
 				}

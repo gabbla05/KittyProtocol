@@ -3,11 +3,18 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/gabbla05/KittyProtocol/internal/cryptoee"
 	"github.com/gabbla05/KittyProtocol/protocol"
 )
+
+// canonicalTarget normalizes the target username to a stable form.
+// This must match the Hub's canonicalization logic.
+func canonicalTarget(t string) string {
+	return strings.ToLower(strings.TrimSpace(t))
+}
 
 // SendAppFrameEncrypted sends an application-level frame (chat control, text, etc.)
 // encrypted as a DATA frame. The Hub requires MAC for all DATA frames.
@@ -15,20 +22,7 @@ func (c *KittyClient) SendAppFrameEncrypted(target string, payload []byte) error
 	c.mu.Lock()
 	stream := c.stream
 	ackMgr := c.ackMgr
-
-	var (
-		kEnc []byte
-		kMac []byte
-		ok   bool
-	)
-	if c.peerKeys != nil {
-		pk, exists := c.peerKeys[target]
-		if exists {
-			kEnc = pk.kEnc
-			kMac = pk.kMac
-			ok = true
-		}
-	}
+	kEnc, kMac, ok := c.getKeysForPeer(target)
 	c.mu.Unlock()
 
 	if !ok {
@@ -47,9 +41,11 @@ func (c *KittyClient) SendAppFrameEncrypted(target string, payload []byte) error
 		ackMgr.AddPending(msgID)
 	}
 
+	canonTarget := canonicalTarget(target)
+
 	payloadB64, macB64, err := cryptoee.EncryptAndMACWithKeys(
 		msgID,
-		target,
+		canonTarget,
 		string(payload),
 		kEnc,
 		kMac,
@@ -60,10 +56,10 @@ func (c *KittyClient) SendAppFrameEncrypted(target string, payload []byte) error
 
 	frame := protocol.DataFrame{
 		BaseFrame: protocol.BaseFrame{
-			Type:  "DATA",
+			Type:  protocol.FrameTypeData,
 			MsgID: msgID,
 		},
-		Target:  target,
+		Target:  canonTarget,
 		Payload: payloadB64,
 		MAC:     macB64,
 	}
@@ -72,6 +68,11 @@ func (c *KittyClient) SendAppFrameEncrypted(target string, payload []byte) error
 	if err != nil {
 		return err
 	}
+
+	// Store last raw frame for replay testing (dev-only helper).
+	c.mu.Lock()
+	c.lastFrame = b
+	c.mu.Unlock()
 
 	_, err = stream.Write(b)
 	return err
@@ -91,10 +92,10 @@ func (c *KittyClient) SendGetStatus(target string) error {
 
 	frame := protocol.GetStatusFrame{
 		BaseFrame: protocol.BaseFrame{
-			Type:  "GET_STATUS",
+			Type:  protocol.FrameTypeGetStatus,
 			MsgID: msgID,
 		},
-		Target: target,
+		Target: canonicalTarget(target),
 	}
 
 	b, err := json.Marshal(frame)
@@ -117,7 +118,7 @@ func (c *KittyClient) SendBye() error {
 	}
 
 	frame := protocol.BaseFrame{
-		Type:  "BYE",
+		Type:  protocol.FrameTypeBye,
 		MsgID: time.Now().UnixMilli(),
 	}
 

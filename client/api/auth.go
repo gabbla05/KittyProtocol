@@ -16,9 +16,9 @@ import (
 //
 // PROTOCOL ORDER:
 //  1. SendHello()
-//  2. WaitForHelloOK()
+//  2. waitHelloOK()
 //  3. SendAuth()
-//  4. WaitForAuthOK()
+//  4. waitAuthOK()
 func (c *KittyClient) SendAuth(user, pass string) error {
 	c.mu.Lock()
 	stream := c.stream
@@ -30,7 +30,7 @@ func (c *KittyClient) SendAuth(user, pass string) error {
 
 	frame := protocol.AuthFrame{
 		BaseFrame: protocol.BaseFrame{
-			Type:  "AUTH",
+			Type:  protocol.FrameTypeAuth,
 			MsgID: time.Now().UnixMilli(),
 		},
 		User: user,
@@ -63,6 +63,10 @@ func (c *KittyClient) waitAuthOK() (bool, string) {
 	stream := c.stream
 	c.mu.Unlock()
 
+	if stream == nil {
+		return false, "NO_STREAM"
+	}
+
 	buf := make([]byte, 4096)
 	n, err := stream.Read(buf)
 	if err != nil {
@@ -75,14 +79,14 @@ func (c *KittyClient) waitAuthOK() (bool, string) {
 	}
 
 	switch typeName {
-	case "ERROR":
+	case protocol.FrameTypeError:
 		var errFrame protocol.ErrorFrame
 		if json.Unmarshal(buf[:n], &errFrame) == nil {
 			return false, errFrame.Code
 		}
 		return false, "PARSE_ERROR"
 
-	case "MEOW_OK":
+	case protocol.FrameTypeMeowOK:
 		var okFrame protocol.MeowOkFrame
 		if json.Unmarshal(buf[:n], &okFrame) != nil {
 			return false, "PARSE_ERROR"
