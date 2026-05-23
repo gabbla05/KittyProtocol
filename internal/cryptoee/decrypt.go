@@ -9,6 +9,10 @@ import (
 	"fmt"
 )
 
+// DecryptAndVerifyWithKeys verifies HMAC and decrypts the payload using AES-GCM.
+// It expects:
+//   - payloadB64: base64-encoded nonce || ciphertext
+//   - macB64:     base64-encoded HMAC-SHA256 over cipher || msg_id || canonical_target.
 func DecryptAndVerifyWithKeys(msgID int64, target, payloadB64, macB64 string, kEnc, kMac []byte) (string, error) {
 	raw, err := base64.StdEncoding.DecodeString(payloadB64)
 	if err != nil {
@@ -38,8 +42,7 @@ func DecryptAndVerifyWithKeys(msgID int64, target, payloadB64, macB64 string, kE
 	nonce := raw[:nonceSize]
 	ciphertext := raw[nonceSize:]
 
-	// --- NEW: AAD must match encryption ---
-	aad := fmt.Appendf(nil, "msgid=%d;target=%s;v=1", msgID, canonicalizeTarget(target))
+	aad := []byte(fmt.Sprintf("msgid=%d;target=%s;v=%d", msgID, canonicalizeTarget(target), aadFormatVersion))
 
 	macInput := buildMACInput(ciphertext, msgID, target)
 	h := hmac.New(sha256.New, kMac)

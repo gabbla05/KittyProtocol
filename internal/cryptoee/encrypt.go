@@ -12,12 +12,13 @@ import (
 	"strings"
 )
 
-// buildMACInput = cipher || msg_id || canonical_target.
+// buildMACInput builds the input to HMAC as:
+//
+//	cipher || msg_id (big-endian uint64) || canonical_target
 func buildMACInput(cipher []byte, msgID int64, target string) []byte {
 	msg := make([]byte, 8)
 	binary.BigEndian.PutUint64(msg, uint64(msgID))
 
-	// Canonicalize target
 	canon := canonicalizeTarget(target)
 
 	out := make([]byte, 0, len(cipher)+len(msg)+len(canon))
@@ -28,15 +29,19 @@ func buildMACInput(cipher []byte, msgID int64, target string) []byte {
 }
 
 // canonicalizeTarget normalizes the target string to a stable form
-// to avoid MAC mismatches due to Unicode or case differences.
+// to avoid MAC mismatches due to case or whitespace differences.
 func canonicalizeTarget(t string) string {
-	// Lowercase + trim is enough for our protocol.
-	// (If needed, we can add NFC normalization later.)
+	// Lowercase + trim is sufficient for this protocol.
+	// If needed, Unicode normalization (NFC) can be added later.
 	return strings.ToLower(strings.TrimSpace(t))
 }
 
 // EncryptAndMACWithKeys encrypts plaintext using AES-GCM and computes HMAC-SHA256
 // over cipher || msg_id || canonical_target.
+//
+// The function returns:
+//   - payloadB64: base64-encoded nonce || ciphertext
+//   - macB64:     base64-encoded HMAC-SHA256
 func EncryptAndMACWithKeys(msgID int64, target, plaintext string, kEnc, kMac []byte) (string, string, error) {
 	block, err := aes.NewCipher(kEnc)
 	if err != nil {
@@ -50,14 +55,13 @@ func EncryptAndMACWithKeys(msgID int64, target, plaintext string, kEnc, kMac []b
 
 	nonceSize := aead.NonceSize()
 
-	// --- NEW: secure random nonce ---
 	nonce := make([]byte, nonceSize)
 	if _, err := rand.Read(nonce); err != nil {
 		return "", "", fmt.Errorf("[Encrypt]: nonce generation error: %w", err)
 	}
 
-	// --- NEW: AAD (associated data) ---
-	aad := []byte(fmt.Sprintf("msgid=%d;target=%s;v=1", msgID, canonicalizeTarget(target)))
+	// AAD binds msgID, canonical target and a format version to the ciphertext.
+	aad := []byte(fmt.Sprintf("msgid=%d;target=%s;v=%d", msgID, canonicalizeTarget(target), aadFormatVersion))
 
 	ciphertext := aead.Seal(nil, nonce, []byte(plaintext), aad)
 
