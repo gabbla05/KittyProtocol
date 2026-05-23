@@ -6,37 +6,37 @@ import (
 	"testing"
 )
 
+// TestSetupTLSConfig verifies that certificates are generated when missing
+// and correctly loaded when already present.
 func TestSetupTLSConfig(t *testing.T) {
 	tempCert := "temp_cert.pem"
 	tempKey := "temp_key.pem"
 
-	// Czyszczenie po teście
+	// Cleanup after test
 	defer os.Remove(tempCert)
 	defer os.Remove(tempKey)
 
-	// Etap 1: Wygenerowanie nowych certyfikatów
-	config, err := SetupTLSConfig(tempCert, tempKey)
+	// Step 1: Generate new certificates
+	cfg, err := SetupTLSConfig(tempCert, tempKey)
 	if err != nil {
-		t.Fatalf("Oczekiwano sukcesu, otrzymano błąd: %v", err)
+		t.Fatalf("expected success, got error: %v", err)
 	}
 
-	// Sprawdzenie, czy wymuszono TLS 1.3
-	if config.MinVersion != tls.VersionTLS13 {
-		t.Errorf("Oczekiwano TLS 1.3, otrzymano: %x", config.MinVersion)
+	if cfg.MinVersion != tls.VersionTLS13 {
+		t.Errorf("expected TLS 1.3, got: %x", cfg.MinVersion)
 	}
 
-	// Sprawdzenie, czy pliki faktycznie powstały
 	if _, err := os.Stat(tempCert); os.IsNotExist(err) {
-		t.Errorf("Plik certyfikatu nie został wygenerowany")
+		t.Errorf("certificate file was not generated")
 	}
 
-	// Etap 2: Wczytanie z już istniejących plików (bez generowania)
-	config2, err := SetupTLSConfig(tempCert, tempKey)
+	// Step 2: Load existing certificates
+	cfg2, err := SetupTLSConfig(tempCert, tempKey)
 	if err != nil {
-		t.Fatalf("Oczekiwano sukcesu przy wczytywaniu istniejących plików, błąd: %v", err)
+		t.Fatalf("expected success when loading existing files, got: %v", err)
 	}
 
-	if len(config2.Certificates) == 0 {
-		t.Errorf("Brak certyfikatów w konfiguracji")
+	if len(cfg2.Certificates) == 0 {
+		t.Errorf("expected loaded certificates, got none")
 	}
 }
