@@ -5,6 +5,10 @@ import (
 	"fmt"
 )
 
+// CurrentProtocolVersion defines the version of the KittyProtocol
+// that both Hub and clients are expected to speak.
+const CurrentProtocolVersion = "1.0"
+
 // Frame type constants – single source of truth for all frame type strings.
 const (
 	FrameTypeHello     = "HELLO"
@@ -74,30 +78,12 @@ type GetStatusFrame struct {
 type StatusResFrame struct {
 	BaseFrame
 	Target string `json:"target"` // Queried user identifier
-	Status string `json:"status"` // "online" or "offline"
+	Status string `json:"status"` // "online", "offline", or "no_target"
 }
 
 // 8. PING and 9. BYE – keep-alive and session termination.
 type PingFrame struct{ BaseFrame }
 type ByeFrame struct{ BaseFrame }
-
-// GetFrameType performs a lightweight parse to extract frame type and msg_id,
-// and strictly rejects malformed or incomplete frames.
-func GetFrameType(data []byte) (string, int64, error) {
-	var base BaseFrame
-	if err := json.Unmarshal(data, &base); err != nil {
-		return "", 0, fmt.Errorf("%s: JSON parsing error", ErrCodeInvalidFrame)
-	}
-	// Strict validation of required fields.
-	if base.Type == "" || base.MsgID == 0 {
-		return "", 0, fmt.Errorf("%s: missing required fields (type/msg_id)", ErrCodeInvalidFrame)
-	}
-	// Verify that the type is one of the supported protocol types.
-	if !IsValidType(base.Type) {
-		return "", 0, fmt.Errorf("%s: unknown or invalid frame type", ErrCodeInvalidFrame)
-	}
-	return base.Type, base.MsgID, nil
-}
 
 // IsValidType checks whether the given frame type is allowed by the protocol.
 func IsValidType(t string) bool {
@@ -116,11 +102,41 @@ func IsValidType(t string) bool {
 	return false
 }
 
+// GetFrameType performs a lightweight parse to extract frame type and msg_id,
+// and strictly rejects malformed or incomplete frames.
+func GetFrameType(data []byte) (string, int64, error) {
+	var base BaseFrame
+	if err := json.Unmarshal(data, &base); err != nil {
+		return "", 0, fmt.Errorf("%s: JSON parsing error", ErrCodeInvalidFrame)
+	}
+	// Strict validation of required fields.
+	if base.Type == "" || base.MsgID <= 0 {
+		return "", 0, fmt.Errorf("%s: missing or invalid fields (type/msg_id)", ErrCodeInvalidFrame)
+	}
+	// Verify that the type is one of the supported protocol types.
+	if !IsValidType(base.Type) {
+		return "", 0, fmt.Errorf("%s: unknown or invalid frame type", ErrCodeInvalidFrame)
+	}
+	return base.Type, base.MsgID, nil
+}
+
 // ParseHelloFrame validates the initial HELLO frame.
 func ParseHelloFrame(data []byte) (*HelloFrame, error) {
 	var f HelloFrame
 	if err := json.Unmarshal(data, &f); err != nil {
 		return nil, fmt.Errorf("%s: Invalid JSON format", ErrCodeInvalidFrame)
+	}
+	if f.Type != FrameTypeHello {
+		return nil, fmt.Errorf("%s: Invalid type for HELLO frame", ErrCodeInvalidFrame)
+	}
+	if f.MsgID <= 0 {
+		return nil, fmt.Errorf("%s: Invalid msg_id in HELLO frame", ErrCodeInvalidFrame)
+	}
+	if f.Version == "" {
+		return nil, fmt.Errorf("%s: Missing version in HELLO frame", ErrCodeInvalidFrame)
+	}
+	if f.Version != CurrentProtocolVersion {
+		return nil, fmt.Errorf("%s: Unsupported protocol version %q", ErrCodeInvalidFrame, f.Version)
 	}
 	return &f, nil
 }
@@ -130,6 +146,12 @@ func ParseAuthFrame(data []byte) (*AuthFrame, error) {
 	var f AuthFrame
 	if err := json.Unmarshal(data, &f); err != nil {
 		return nil, fmt.Errorf("%s: Invalid JSON format", ErrCodeInvalidFrame)
+	}
+	if f.Type != FrameTypeAuth {
+		return nil, fmt.Errorf("%s: Invalid type for AUTH frame", ErrCodeInvalidFrame)
+	}
+	if f.MsgID <= 0 {
+		return nil, fmt.Errorf("%s: Invalid msg_id in AUTH frame", ErrCodeInvalidFrame)
 	}
 	if f.User == "" || f.Pass == "" {
 		return nil, fmt.Errorf("%s: Missing user or pass in AUTH frame", ErrCodeInvalidFrame)
@@ -143,6 +165,20 @@ func ParseDataFrame(data []byte) (*DataFrame, error) {
 	if err := json.Unmarshal(data, &f); err != nil {
 		return nil, fmt.Errorf("%s: Invalid JSON format", ErrCodeInvalidFrame)
 	}
+	if f.Type != FrameTypeData {
+		return nil, fmt.Errorf("%s: Invalid type for DATA frame", ErrCodeInvalidFrame)
+	}
+	if f.MsgID <= 0 {
+		return nil, fmt.Errorf("%s: Invalid msg_id in DATA frame", ErrCodeInvalidFrame)
+	}
+	// Sender must be empty on client‑side DATA frames; it is set by the Hub.
+	// Hub-side validation can allow non-empty Sender when forwarding.
+	if f.Sender != "" {
+		return nil, fmt.Errorf("%s: Sender field must be empty in client DATA frame", ErrCodeInvalidFrame)
+	}
+	if f.Target == "" {
+		return nil, fmt.Errorf("%s: Missing target in DATA frame", ErrCodeInvalidFrame)
+	}
 	if f.Payload == "" || f.MAC == "" {
 		return nil, fmt.Errorf("%s: Missing payload or MAC in DATA frame", ErrCodeInvalidFrame)
 	}
@@ -154,6 +190,12 @@ func ParseErrorFrame(data []byte) (*ErrorFrame, error) {
 	var f ErrorFrame
 	if err := json.Unmarshal(data, &f); err != nil {
 		return nil, fmt.Errorf("%s: Invalid JSON format", ErrCodeInvalidFrame)
+	}
+	if f.Type != FrameTypeError {
+		return nil, fmt.Errorf("%s: Invalid type for ERROR frame", ErrCodeInvalidFrame)
+	}
+	if f.MsgID <= 0 {
+		return nil, fmt.Errorf("%s: Invalid msg_id in ERROR frame", ErrCodeInvalidFrame)
 	}
 	if f.Code == "" {
 		return nil, fmt.Errorf("%s: Missing error code in ERROR frame", ErrCodeInvalidFrame)
@@ -167,15 +209,16 @@ func ParseGetStatusFrame(data []byte) (*GetStatusFrame, error) {
 	if err := json.Unmarshal(data, &f); err != nil {
 		return nil, fmt.Errorf("%s: Invalid JSON format", ErrCodeInvalidFrame)
 	}
-	
-	// NOTE: Empty target is temporarily allowed because the client uses
-	// GET_STATUS "" to signal "no active chat partner" on /quit.
-	// Once application‑level CHAT_END frames are implemented,
-	// this validation should be re‑enabled.
-	
-	// if f.Target == "" {
-	// 	return nil, fmt.Errorf("%s: Missing target in GET_STATUS frame", ErrCodeInvalidFrame)
-	// }
+	if f.Type != FrameTypeGetStatus {
+		return nil, fmt.Errorf("%s: Invalid type for GET_STATUS frame", ErrCodeInvalidFrame)
+	}
+	if f.MsgID <= 0 {
+		return nil, fmt.Errorf("%s: Invalid msg_id in GET_STATUS frame", ErrCodeInvalidFrame)
+	}
+	// Empty target is no longer allowed at protocol level.
+	if f.Target == "" {
+		return nil, fmt.Errorf("%s: Missing target in GET_STATUS frame", ErrCodeInvalidFrame)
+	}
 	return &f, nil
 }
 
@@ -184,6 +227,12 @@ func ParseStatusResFrame(data []byte) (*StatusResFrame, error) {
 	var f StatusResFrame
 	if err := json.Unmarshal(data, &f); err != nil {
 		return nil, fmt.Errorf("%s: Invalid JSON format", ErrCodeInvalidFrame)
+	}
+	if f.Type != FrameTypeStatusRes {
+		return nil, fmt.Errorf("%s: Invalid type for STATUS_RES frame", ErrCodeInvalidFrame)
+	}
+	if f.MsgID <= 0 {
+		return nil, fmt.Errorf("%s: Invalid msg_id in STATUS_RES frame", ErrCodeInvalidFrame)
 	}
 	if f.Target == "" || f.Status == "" {
 		return nil, fmt.Errorf("%s: Missing target or status in STATUS_RES frame", ErrCodeInvalidFrame)
