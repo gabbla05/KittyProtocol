@@ -29,63 +29,59 @@ const (
 
 // BaseFrame contains fields common to every frame.
 type BaseFrame struct {
-	Type  string `json:"type"`   // e.g. "HELLO", "AUTH", "DATA"
-	MsgID int64  `json:"msg_id"` // Timestamp used as a unique ID
+	Type  string `json:"type"`
+	MsgID int64  `json:"msg_id"`
 }
 
-// 1. HELLO – initial greeting frame.
+// Frame definitions
 type HelloFrame struct {
 	BaseFrame
-	Version string `json:"version"` // e.g. "1.0"
+	Version string `json:"version"`
 }
 
-// 2. AUTH – authentication frame.
 type AuthFrame struct {
 	BaseFrame
-	User string `json:"user"` // Username
-	Pass string `json:"pass"` // Password
+	User string `json:"user"`
+	Pass string `json:"pass"`
 }
 
-// 3. DATA – E2EE payload transfer frame.
 type DataFrame struct {
 	BaseFrame
-	Target  string `json:"target,omitempty"` // Recipient (on sender side)
-	Sender  string `json:"sender,omitempty"` // Sender (on receiver side – added by Hub)
-	Payload string `json:"payload"`          // Encrypted Base64 payload
-	MAC     string `json:"mac"`              // HMAC for E2EE integrity
+	Target  string `json:"target,omitempty"`
+	Sender  string `json:"sender,omitempty"`
+	Payload string `json:"payload"`
+	MAC     string `json:"mac"`
 }
 
-// 4. MEOW_OK – application-level acknowledgment (ACK).
 type MeowOkFrame struct {
 	BaseFrame
-	Status string `json:"status,omitempty"` // Optional status description
+	Status string `json:"status,omitempty"`
 }
 
-// 5. ERROR – error frame.
 type ErrorFrame struct {
 	BaseFrame
-	Code string `json:"code"` // Error code (e.g. ERR_02)
-	Desc string `json:"desc"` // Error description
+	Code string `json:"code"`
+	Desc string `json:"desc"`
 }
 
-// 6. GET_STATUS – query for user status.
 type GetStatusFrame struct {
 	BaseFrame
-	Target string `json:"target"` // User whose status is being queried
+	Target string `json:"target"`
 }
 
-// 7. STATUS_RES – response with user status.
 type StatusResFrame struct {
 	BaseFrame
-	Target string `json:"target"` // Queried user identifier
-	Status string `json:"status"` // "online", "offline", or "no_target"
+	Target string `json:"target"`
+	Status string `json:"status"`
 }
 
-// 8. PING and 9. BYE – keep-alive and session termination.
 type PingFrame struct{ BaseFrame }
 type ByeFrame struct{ BaseFrame }
 
-// IsValidType checks whether the given frame type is allowed by the protocol.
+// -----------------------------------------------------------------------------
+// Helpers
+// -----------------------------------------------------------------------------
+
 func IsValidType(t string) bool {
 	switch t {
 	case FrameTypeHello,
@@ -102,25 +98,24 @@ func IsValidType(t string) bool {
 	return false
 }
 
-// GetFrameType performs a lightweight parse to extract frame type and msg_id,
-// and strictly rejects malformed or incomplete frames.
 func GetFrameType(data []byte) (string, int64, error) {
 	var base BaseFrame
 	if err := json.Unmarshal(data, &base); err != nil {
 		return "", 0, fmt.Errorf("%s: JSON parsing error", ErrCodeInvalidFrame)
 	}
-	// Strict validation of required fields.
 	if base.Type == "" || base.MsgID <= 0 {
 		return "", 0, fmt.Errorf("%s: missing or invalid fields (type/msg_id)", ErrCodeInvalidFrame)
 	}
-	// Verify that the type is one of the supported protocol types.
 	if !IsValidType(base.Type) {
 		return "", 0, fmt.Errorf("%s: unknown or invalid frame type", ErrCodeInvalidFrame)
 	}
 	return base.Type, base.MsgID, nil
 }
 
-// ParseHelloFrame validates the initial HELLO frame.
+// -----------------------------------------------------------------------------
+// Parsers
+// -----------------------------------------------------------------------------
+
 func ParseHelloFrame(data []byte) (*HelloFrame, error) {
 	var f HelloFrame
 	if err := json.Unmarshal(data, &f); err != nil {
@@ -141,7 +136,6 @@ func ParseHelloFrame(data []byte) (*HelloFrame, error) {
 	return &f, nil
 }
 
-// ParseAuthFrame strictly validates the AUTH frame.
 func ParseAuthFrame(data []byte) (*AuthFrame, error) {
 	var f AuthFrame
 	if err := json.Unmarshal(data, &f); err != nil {
@@ -159,7 +153,6 @@ func ParseAuthFrame(data []byte) (*AuthFrame, error) {
 	return &f, nil
 }
 
-// ParseDataFrame validates the DATA frame and checks required E2EE fields.
 func ParseDataFrame(data []byte) (*DataFrame, error) {
 	var f DataFrame
 	if err := json.Unmarshal(data, &f); err != nil {
@@ -171,10 +164,8 @@ func ParseDataFrame(data []byte) (*DataFrame, error) {
 	if f.MsgID <= 0 {
 		return nil, fmt.Errorf("%s: Invalid msg_id in DATA frame", ErrCodeInvalidFrame)
 	}
-	// Sender must be empty on client‑side DATA frames; it is set by the Hub.
-	// Hub-side validation can allow non-empty Sender when forwarding.
 	if f.Sender != "" {
-		return nil, fmt.Errorf("%s: Sender field must be empty in client DATA frame", ErrCodeInvalidFrame)
+		return nil, fmt.Errorf("%s: Sender must be empty in client DATA frame", ErrCodeInvalidFrame)
 	}
 	if f.Target == "" {
 		return nil, fmt.Errorf("%s: Missing target in DATA frame", ErrCodeInvalidFrame)
@@ -185,7 +176,6 @@ func ParseDataFrame(data []byte) (*DataFrame, error) {
 	return &f, nil
 }
 
-// ParseErrorFrame validates the ERROR frame.
 func ParseErrorFrame(data []byte) (*ErrorFrame, error) {
 	var f ErrorFrame
 	if err := json.Unmarshal(data, &f); err != nil {
@@ -203,7 +193,6 @@ func ParseErrorFrame(data []byte) (*ErrorFrame, error) {
 	return &f, nil
 }
 
-// ParseGetStatusFrame validates the GET_STATUS frame.
 func ParseGetStatusFrame(data []byte) (*GetStatusFrame, error) {
 	var f GetStatusFrame
 	if err := json.Unmarshal(data, &f); err != nil {
@@ -215,14 +204,12 @@ func ParseGetStatusFrame(data []byte) (*GetStatusFrame, error) {
 	if f.MsgID <= 0 {
 		return nil, fmt.Errorf("%s: Invalid msg_id in GET_STATUS frame", ErrCodeInvalidFrame)
 	}
-	// Empty target is no longer allowed at protocol level.
 	if f.Target == "" {
 		return nil, fmt.Errorf("%s: Missing target in GET_STATUS frame", ErrCodeInvalidFrame)
 	}
 	return &f, nil
 }
 
-// ParseStatusResFrame validates the STATUS_RES frame.
 func ParseStatusResFrame(data []byte) (*StatusResFrame, error) {
 	var f StatusResFrame
 	if err := json.Unmarshal(data, &f); err != nil {
@@ -236,6 +223,34 @@ func ParseStatusResFrame(data []byte) (*StatusResFrame, error) {
 	}
 	if f.Target == "" || f.Status == "" {
 		return nil, fmt.Errorf("%s: Missing target or status in STATUS_RES frame", ErrCodeInvalidFrame)
+	}
+	return &f, nil
+}
+
+func ParsePingFrame(data []byte) (*PingFrame, error) {
+	var f PingFrame
+	if err := json.Unmarshal(data, &f); err != nil {
+		return nil, fmt.Errorf("%s: Invalid JSON format", ErrCodeInvalidFrame)
+	}
+	if f.Type != FrameTypePing {
+		return nil, fmt.Errorf("%s: Invalid type for PING frame", ErrCodeInvalidFrame)
+	}
+	if f.MsgID <= 0 {
+		return nil, fmt.Errorf("%s: Invalid msg_id in PING frame", ErrCodeInvalidFrame)
+	}
+	return &f, nil
+}
+
+func ParseByeFrame(data []byte) (*ByeFrame, error) {
+	var f ByeFrame
+	if err := json.Unmarshal(data, &f); err != nil {
+		return nil, fmt.Errorf("%s: Invalid JSON format", ErrCodeInvalidFrame)
+	}
+	if f.Type != FrameTypeBye {
+		return nil, fmt.Errorf("%s: Invalid type for BYE frame", ErrCodeInvalidFrame)
+	}
+	if f.MsgID <= 0 {
+		return nil, fmt.Errorf("%s: Invalid msg_id in BYE frame", ErrCodeInvalidFrame)
 	}
 	return &f, nil
 }

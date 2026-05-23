@@ -1,16 +1,7 @@
-// hub/main.go
-// Entry point for the KittyProtocol Hub.
-// Responsible for:
-//   - loading configuration
-//   - initializing TLS + QUIC
-//   - accepting incoming connections
-//   - dispatching each connection to handleClient()
-
 package main
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -30,11 +21,10 @@ var (
 
 func main() {
 	loadEnv()
-	// if sth goes wrong with reading env please try using _ = godotenv.Load() and
 
 	tlsConf, err := certmanager.SetupTLSConfig("certs/cert.pem", "certs/key.pem")
 	if err != nil {
-		fmt.Println("[Hub] Failed to load TLS certificates:", err)
+		logError("Failed to load TLS certificates: %v", err)
 		return
 	}
 
@@ -52,19 +42,18 @@ func main() {
 
 	listener, err := quic.ListenAddr(addr, tlsConf, quicConf)
 	if err != nil {
-		fmt.Println("[Hub] Failed to start listener:", err)
+		logError("Failed to start listener: %v", err)
 		return
 	}
 
-	fmt.Println("[Hub] 🐈 KittyProtocol Hub listening on", addr)
+	logInfo("🐈 KittyProtocol Hub listening on %s", addr)
 
 	setupSignalHandler(listener)
 
-	// Accept loop
 	for {
 		conn, err := listener.Accept(context.Background())
 		if err != nil {
-			fmt.Println("[Hub] Accept error:", err)
+			logError("Accept error: %v", err)
 			return
 		}
 
@@ -72,19 +61,21 @@ func main() {
 	}
 }
 
-// loadEnv loads environment variables from .env if present.
 func loadEnv() {
 	_ = godotenv.Load()
 }
 
-// setupSignalHandler gracefully shuts down the listener on OS signals.
 func setupSignalHandler(listener *quic.Listener) {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
 
 	go func() {
 		sig := <-sigCh
-		fmt.Println("\n[Hub] Caught signal:", sig)
+		logWarn("Caught signal: %v", sig)
+
+		globalSessions.Stop()
 		_ = listener.Close()
+
+		logInfo("Graceful shutdown complete.")
 	}()
 }

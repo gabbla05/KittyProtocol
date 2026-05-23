@@ -8,22 +8,23 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
-// clientContext stores all state related to a single client connection.
-// It keeps track of:
-//   - QUIC connection and stream
-//   - authenticated session (after AUTH)
-//   - username
-//   - AUTH timeout timer
+type connectionState int
+
+const (
+	stateInit connectionState = iota
+	stateHelloReceived
+	stateAuthenticated
+)
+
 type clientContext struct {
 	conn      *quic.Conn
 	stream    *quic.Stream
 	session   *protection.Session
 	username  string
 	authTimer *protection.AuthTimer
+	state     connectionState
 }
 
-// cleanup is executed when the handler finishes.
-// It removes the session from the SessionManager and stops the AUTH timer.
 func (c *clientContext) cleanup() {
 	if c.session != nil {
 		fmt.Println("[Handler: Context] Cleaning up session for:", c.username)
@@ -39,8 +40,6 @@ func (c *clientContext) cleanup() {
 	}
 }
 
-// touch updates the session's LastActive timestamp.
-// This is used for idle timeout detection.
 func (c *clientContext) touch() {
 	if c.session != nil {
 		c.session.LastActive = time.Now()

@@ -2,38 +2,32 @@ package api
 
 import (
 	"encoding/json"
-	"errors"
+	"fmt"
 	"time"
 
 	"github.com/gabbla05/KittyProtocol/protocol"
 )
 
-// SendHello sends the initial HELLO frame to the Hub.
-// This is the first step of the KittyProtocol handshake and must be
-// called immediately after establishing the QUIC stream.
 func (c *KittyClient) SendHello() error {
-	c.mu.Lock()
-	stream := c.stream
-	c.mu.Unlock()
-
-	if stream == nil {
-		return errors.New("stream is nil")
-	}
-
 	frame := protocol.HelloFrame{
 		BaseFrame: protocol.BaseFrame{
-			Type:  "HELLO",
+			Type:  protocol.FrameTypeHello,
 			MsgID: time.Now().UnixMilli(),
 		},
+		Version: protocol.CurrentProtocolVersion,
 	}
 
 	b, err := json.Marshal(frame)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to marshal HELLO: %w", err)
 	}
 
-	_, err = stream.Write(b)
-	return err
+	_, err = c.stream.Write(b)
+	if err != nil {
+		return fmt.Errorf("failed to send HELLO: %w", err)
+	}
+
+	return nil
 }
 
 // waitHelloOK waits for MEOW_OK or ERROR after HELLO.

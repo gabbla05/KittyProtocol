@@ -2,24 +2,16 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"io"
 
 	"github.com/gabbla05/KittyProtocol/protocol"
 	"github.com/quic-go/quic-go"
 )
 
-// handleClient is the entry point for handling a single QUIC connection.
-//
-// Responsibilities:
-//   - accept the bidirectional stream
-//   - read incoming frames
-//   - perform initial validation (type + msg_id)
-//   - dispatch to dedicated handlers
 func handleClient(conn *quic.Conn) {
 	stream, err := conn.AcceptStream(context.Background())
 	if err != nil {
-		fmt.Println("[Hub: HandlerDispatcher] Stream accept error:", err)
+		logError("Stream accept error: %v", err)
 		return
 	}
 	defer stream.Close()
@@ -27,61 +19,51 @@ func handleClient(conn *quic.Conn) {
 	ctx := &clientContext{
 		conn:   conn,
 		stream: stream,
+		state:  stateInit,
 	}
 	defer ctx.cleanup()
 
-	buf := make([]byte, 4096)
+	buf := make([]byte, 8192)
 
 	for {
 		n, err := stream.Read(buf)
 		if err != nil {
 			if err != io.EOF {
-				fmt.Println("[Hub: HandlerDispatcher] Stream read error:", err)
+				logError("Stream read error: %v", err)
 			}
 			return
 		}
 
 		raw := buf[:n]
-		// Debug logging (can be commented out in production)
-		// fmt.Println("[Hub: HandlerDispatcher] STREAM ID:", stream.StreamID())
-		// fmt.Println("[Hub: HandlerDispatcher] RAW:", string(raw))
 
-		// Initial validation: extract type and msg_id.
-		typeName, _, perr := protocol.GetFrameType(raw)
-		if perr != nil {
-			sendError(stream, "ERR_02", perr.Error())
+		typeName, msgID, perr := protocol.GetFrameType(raw)
+		if perr != nil || msgID <= 0 {
+			sendError(stream, "ERR_02", "Invalid frame header")
 			continue
 		}
 
-		// Debug logging for frame type
-		// fmt.Println("[Hub: HandlerDispatcher] Received frame type:", typeName)
-
 		switch typeName {
-		case "HELLO":
-			ctx.handleHello()
+		case protocol.FrameTypeHello:
+			ctx.handleHello(raw)
 
-		case "AUTH":
+		case protocol.FrameTypeAuth:
 			ctx.handleAuth(raw)
 
-		case "PING":
-			ctx.handlePing()
+		case protocol.FrameTypePing:
+			ctx.handlePing(raw)
 
-		case "DATA":
+		case protocol.FrameTypeData:
 			ctx.handleData(raw)
 
-		case "GET_STATUS":
+		case protocol.FrameTypeGetStatus:
 			ctx.handleGetStatus(raw)
 
-		case "STATUS_RES":
-			// Hub does not expect STATUS_RES from clients.
-			fmt.Println("[Hub: HandlerDispatcher] Unexpected STATUS_RES from client – ignoring")
-
-		case "BYE":
-			ctx.handleBye()
+		case protocol.FrameTypeBye:
+			ctx.handleBye(raw)
 			return
 
 		default:
-			sendError(stream, "ERR_02", "Unknown frame type: "+typeName)
+			sendError(stream, "ERR_02", "Unknown frame type")
 		}
 	}
 }
