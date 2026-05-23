@@ -49,6 +49,9 @@ func handleClient(conn *quic.Conn) {
 		case protocol.FrameTypeAuth:
 			ctx.handleAuth(raw)
 
+		case protocol.FrameTypeRegister:
+			ctx.handleRegister(raw)
+
 		case protocol.FrameTypePing:
 			ctx.handlePing(raw)
 

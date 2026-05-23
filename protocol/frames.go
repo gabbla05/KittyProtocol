@@ -6,13 +6,13 @@ import (
 )
 
 // CurrentProtocolVersion defines the version of the KittyProtocol
-// that both Hub and clients are expected to speak.
 const CurrentProtocolVersion = "1.0"
 
-// Frame type constants – single source of truth for all frame type strings.
+// Frame type constants
 const (
 	FrameTypeHello     = "HELLO"
 	FrameTypeAuth      = "AUTH"
+	FrameTypeRegister  = "REGISTER"
 	FrameTypeData      = "DATA"
 	FrameTypeMeowOK    = "MEOW_OK"
 	FrameTypeError     = "ERROR"
@@ -22,9 +22,9 @@ const (
 	FrameTypeBye       = "BYE"
 )
 
-// Common error code constants used in protocol-level validation.
+// Common error codes
 const (
-	ErrCodeInvalidFrame = "ERR_02" // generic "invalid frame" / "bad format" error
+	ErrCodeInvalidFrame = "ERR_02"
 )
 
 // BaseFrame contains fields common to every frame.
@@ -33,7 +33,10 @@ type BaseFrame struct {
 	MsgID int64  `json:"msg_id"`
 }
 
+// -----------------------------------------------------------------------------
 // Frame definitions
+// -----------------------------------------------------------------------------
+
 type HelloFrame struct {
 	BaseFrame
 	Version string `json:"version"`
@@ -86,6 +89,7 @@ func IsValidType(t string) bool {
 	switch t {
 	case FrameTypeHello,
 		FrameTypeAuth,
+		FrameTypeRegister,
 		FrameTypeData,
 		FrameTypeMeowOK,
 		FrameTypeError,
@@ -136,21 +140,30 @@ func ParseHelloFrame(data []byte) (*HelloFrame, error) {
 	return &f, nil
 }
 
-func ParseAuthFrame(data []byte) (*AuthFrame, error) {
+// Shared parser for AUTH and REGISTER
+func parseAuthLikeFrame(data []byte, expectedType string) (*AuthFrame, error) {
 	var f AuthFrame
 	if err := json.Unmarshal(data, &f); err != nil {
 		return nil, fmt.Errorf("%s: Invalid JSON format", ErrCodeInvalidFrame)
 	}
-	if f.Type != FrameTypeAuth {
-		return nil, fmt.Errorf("%s: Invalid type for AUTH frame", ErrCodeInvalidFrame)
+	if f.Type != expectedType {
+		return nil, fmt.Errorf("%s: Invalid type for %s frame", ErrCodeInvalidFrame, expectedType)
 	}
 	if f.MsgID <= 0 {
-		return nil, fmt.Errorf("%s: Invalid msg_id in AUTH frame", ErrCodeInvalidFrame)
+		return nil, fmt.Errorf("%s: Invalid msg_id in %s frame", ErrCodeInvalidFrame, expectedType)
 	}
 	if f.User == "" || f.Pass == "" {
-		return nil, fmt.Errorf("%s: Missing user or pass in AUTH frame", ErrCodeInvalidFrame)
+		return nil, fmt.Errorf("%s: Missing user or pass in %s frame", ErrCodeInvalidFrame, expectedType)
 	}
 	return &f, nil
+}
+
+func ParseAuthFrame(data []byte) (*AuthFrame, error) {
+	return parseAuthLikeFrame(data, FrameTypeAuth)
+}
+
+func ParseRegisterFrame(data []byte) (*AuthFrame, error) {
+	return parseAuthLikeFrame(data, FrameTypeRegister)
 }
 
 func ParseDataFrame(data []byte) (*DataFrame, error) {

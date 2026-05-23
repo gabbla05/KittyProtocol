@@ -3,39 +3,46 @@
 
 package main
 
-import (
-	"encoding/json"
-	"fmt"
-	"time"
+// import (
+// 	"encoding/json"
+// 	"fmt"
 
-	"github.com/gabbla05/KittyProtocol/internal/protection"
-	"github.com/gabbla05/KittyProtocol/protocol"
-	"github.com/quic-go/quic-go"
-)
+// 	"github.com/gabbla05/KittyProtocol/internal/protection"
+// 	"github.com/gabbla05/KittyProtocol/protocol"
+// )
 
-// handleHELLO processes the initial HELLO frame and starts the AUTH timeout timer.
-// It responds with MEOW_OK(status="Ready for auth").
-func handleHELLO(stream *quic.Stream, conn *quic.Conn) *protection.AuthTimer {
-	ok := protocol.MeowOkFrame{
-		BaseFrame: protocol.BaseFrame{
-			Type:  "MEOW_OK",
-			MsgID: time.Now().UnixMilli(),
-		},
-		Status: "Ready for auth",
-	}
+// // handleHello processes the initial HELLO frame and starts the AUTH timeout timer.
+// // It responds with MEOW_OK(status="Ready for auth").
+// func (c *clientContext) handleHello(raw []byte) {
+// 	// Parse HELLO
+// 	frame, err := protocol.ParseHelloFrame(raw)
+// 	if err != nil {
+// 		sendError(c.stream, "ERR_02", err.Error())
+// 		return
+// 	}
 
-	if b, err := json.Marshal(ok); err == nil {
-		if _, err := stream.Write(b); err != nil {
-			fmt.Println("[Hub: AuthFlow] Failed to send MEOW_OK:", err)
-		}
-	} else {
-		fmt.Println("[Hub: AuthFlow] Failed to marshal MEOW_OK:", err)
-	}
+// 	// Set state
+// 	c.state = stateHelloReceived
 
-	// Start 20-second AUTH timeout.
-	return protection.StartAuthTimer(func() {
-		// On timeout, send ERR_03 and close the connection.
-		sendError(stream, "ERR_03", "Authorization timeout reached")
-		_ = conn.CloseWithError(0x03, "ERR_03: Auth Timeout")
-	})
-}
+// 	// Send MEOW_OK
+// 	ok := protocol.MeowOkFrame{
+// 		BaseFrame: protocol.BaseFrame{
+// 			Type:  protocol.FrameTypeMeowOK,
+// 			MsgID: frame.MsgID,
+// 		},
+// 		Status: "Ready for auth",
+// 	}
+
+// 	b, err := json.Marshal(ok)
+// 	if err == nil {
+// 		_, _ = c.stream.Write(b)
+// 	} else {
+// 		fmt.Println("[Hub: HELLO] Failed to marshal MEOW_OK:", err)
+// 	}
+
+// 	// Start AUTH timeout
+// 	c.authTimer = protection.StartAuthTimer(func() {
+// 		sendError(c.stream, "ERR_03", "Authorization timeout reached")
+// 		_ = c.conn.CloseWithError(0x03, "ERR_03: Auth Timeout")
+// 	})
+// }

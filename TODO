@@ -1,10 +1,13 @@
-- nawiązanie połączenia pomiędzy użytkownikami już jest po stronie aplikacji !!
 - przy prezentowaniu gotowego projektu można pokazać że na warstwie protokołu działa operacja /replay która symuluje ten atak
-- TESTY DO NOWEGO CRYPTOEE_TEST
-- TESTY OGÓLNIE
+- TESTY OGÓLNIE - LEPIEJ POMYŚLANE, MOŻĘ JAKOŚ LEPIEJ USTRUKTURYZOWAĆ
 - ŁADOWANIE KLUCZY KONWERSACJI Z PLIKU!
-- merge
-- rozwiązanie problemu z 3 rozmówcami podającymi ten sam sekret - status busy + pojedynczy czat naraz - logika aplikacyjna
 - brak mockowania!! zrobic w końcu normalne połączenie z bazą danych i tam przechowywanie, a nie tak jak teraz `internal/auth/auth.go`
-- jeżeli ramka PROTOKOŁU pełni obecnie więcej niż jedną funkcję logiczną (jak np. w przypadku operacji /quit i GET_STATUS) to gdy zaimpplementuje się logikę aplikacji to zmienić koniecznie 
 - sprawdzić czy kody błędów się zgadzają z dokumentacją
+- info dodatkowe:
+    jak nie ma usera to gdy pytamy o jego status, to mimo to pokazuje offline gdy pytamy czy jest - brak zdradzania czy user istnieje
+- CURRENT_PROJECT do zmiany
+- dać kroki dla dewelopera któ©y ma stestować działanie bazy - jakie komendy, co usunąć itp.
+- jaki jest sens registerFrame zamiast po prostu zrobić parse registerframe na authframe skoro to dosłownie ta sama ramka
+- forma przechowywania sekretóœ lokalnie - słabe szyfrowanie chyba bo widać że sekrety są te same. Zamiast tego zastanowić się nad hashowaniem
+
+- !!!!WAŻNE!!! plik ze stałymi (W tym z dokumentacji) aby w kodzie nie używać magicznych liczb, ale konkretnych stałych

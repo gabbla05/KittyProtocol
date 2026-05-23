@@ -486,3 +486,6 @@ KittyProtocol is now:
 - configurable and deployment-ready,
 - fully tested, benchmarked, and scalable,
 - aligned with security best practices.
+
+
+# WAŻNE: ZMIANA W PROTOKOLE - DODANIE RAMKI REGISTER ABY BYŁA MOŻLIWOŚĆ REJESTRACJI DO SYSTEMU!

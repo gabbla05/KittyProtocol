@@ -32,6 +32,10 @@ func (rl *RateLimiter) Allow() bool {
 	now := time.Now()
 	elapsed := now.Sub(rl.lastUpdate)
 	refill := int(elapsed.Seconds() * float64(rl.maxTokens))
+	if refill > 0 {
+		rl.tokens = min(rl.maxTokens, rl.tokens+refill)
+		rl.lastUpdate = now
+	}
 
 	if refill > 0 {
 		rl.tokens += refill
@@ -55,7 +59,7 @@ type AuthTimer struct {
 
 // DefaultAuthTimeout defines how long the client has to complete AUTH
 // before the Hub closes the connection.
-const DefaultAuthTimeout = 20 * time.Second
+const DefaultAuthTimeout = 2 * time.Minute // 2 minutes is a reasonable default, but can be adjusted as needed.
 
 // StartAuthTimer starts an AUTH timeout timer that calls onTimeout when it fires.
 func StartAuthTimer(onTimeout func()) *AuthTimer {

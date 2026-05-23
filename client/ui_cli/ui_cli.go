@@ -33,7 +33,6 @@ func NewCliUI(c *api.KittyClient) *CliUI {
 
 // ReadLine reads a single line from stdin, trimming whitespace.
 func (ui *CliUI) ReadLine() string {
-	fmt.Print("> ")
 	line, _ := ui.reader.ReadString('\n')
 	return strings.TrimSpace(line)
 }
@@ -41,6 +40,11 @@ func (ui *CliUI) ReadLine() string {
 // Println prints a line to stdout.
 func (ui *CliUI) Println(v ...any) {
 	fmt.Println(v...)
+}
+
+// Print prints a line to stdout withou \n at the end.
+func (ui *CliUI) Print(v ...any) {
+	fmt.Print(v...)
 }
 
 // Printf prints a formatted line to stdout.

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"os"
 	"os/signal"
 	"syscall"
@@ -11,6 +12,7 @@ import (
 	"github.com/gabbla05/KittyProtocol/internal/certmanager"
 	"github.com/gabbla05/KittyProtocol/internal/protection"
 	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
 	"github.com/quic-go/quic-go"
 )
 
@@ -27,6 +29,15 @@ func main() {
 		logError("Failed to load TLS certificates: %v", err)
 		return
 	}
+
+	dsn := "postgres://kitty:kittypass@localhost:5432/kittyhub?sslmode=disable"
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		logError("DB connection failed: %v", err)
+		return
+	}
+
+	globalAuth = auth.NewDBAuth(db)
 
 	quicConf := &quic.Config{
 		MaxIdleTimeout:          60 * time.Second,

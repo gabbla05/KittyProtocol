@@ -42,7 +42,7 @@ func (c *clientContext) handleAuth(raw []byte) {
 
 	ok := protocol.MeowOkFrame{
 		BaseFrame: protocol.BaseFrame{
-			Type:  "MEOW_OK",
+			Type:  protocol.FrameTypeMeowOK,
 			MsgID: frame.MsgID,
 		},
 		Status: "Logged in",
@@ -50,8 +50,43 @@ func (c *clientContext) handleAuth(raw []byte) {
 
 	b, err := json.Marshal(ok)
 	if err == nil {
-		c.stream.Write(b)
+		_, _ = c.stream.Write(b)
 	} else {
 		fmt.Println("[Hub: Auth] Failed to marshal MEOW_OK:", err)
+	}
+}
+
+func (c *clientContext) handleRegister(raw []byte) {
+	if c.state != stateHelloReceived {
+		sendError(c.stream, "ERR_02", "REGISTER not allowed before HELLO")
+		return
+	}
+
+	frame, err := protocol.ParseRegisterFrame(raw)
+	if err != nil {
+		sendError(c.stream, "ERR_02", err.Error())
+		return
+	}
+
+	// Rejestracja NIE tworzy sesji i NIE loguje użytkownika.
+	// Klient po udanej rejestracji powinien wykonać osobne AUTH.
+	if err := globalAuth.Register(frame.User, frame.Pass); err != nil {
+		sendError(c.stream, "ERR_06", err.Error())
+		return
+	}
+
+	ok := protocol.MeowOkFrame{
+		BaseFrame: protocol.BaseFrame{
+			Type:  protocol.FrameTypeMeowOK,
+			MsgID: frame.MsgID,
+		},
+		Status: "Registered",
+	}
+
+	b, err := json.Marshal(ok)
+	if err == nil {
+		_, _ = c.stream.Write(b)
+	} else {
+		fmt.Println("[Hub: Register] Failed to marshal MEOW_OK:", err)
 	}
 }
