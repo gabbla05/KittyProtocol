@@ -8,14 +8,14 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/gabbla05/KittyProtocol/internal/protection"
 	"github.com/gabbla05/KittyProtocol/protocol"
-	"github.com/quic-go/quic-go"
 )
 
 // sendError sends a standardized ERROR frame to the client.
 // Serialization or write failures are logged but do not panic.
 // This function MUST be used by all handlers to ensure consistent error reporting.
-func sendError(stream *quic.Stream, code, desc string) {
+func sendError(stream protection.Stream, code, desc string) {
 	errFrame := protocol.ErrorFrame{
 		BaseFrame: protocol.BaseFrame{
 			Type:  protocol.FrameTypeError,

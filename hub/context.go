@@ -31,7 +31,7 @@ const (
 // It is created in dispatcher.go when a new QUIC stream is accepted.
 type clientContext struct {
 	conn      *quic.Conn            // Underlying QUIC connection
-	stream    *quic.Stream          // Primary bidirectional stream
+	stream    protection.Stream     // Primary bidirectional stream
 	session   *protection.Session   // Active session after AUTH
 	username  string                // Set only after successful AUTH
 	state     connectionState       // Protocol handshake state machine

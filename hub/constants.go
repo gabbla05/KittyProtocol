@@ -6,6 +6,17 @@ import "time"
 // These values complement protocol-level constants defined in protocol/error_codes.go.
 // They MUST remain consistent with the protocol documentation and the protection package.
 
+//===============================================================================
+// NOTE:																		|
+// These constants are part of the KittyProtocol specification.					|
+// They may not be referenced directly inside the Hub because their enforcement	|
+// happens in the protection package (rate limiting, replay, idle timeout)		|
+// or on the client side (payload size).									    |
+//																				|
+// DO NOT REMOVE — they are required for protocol stability, documentation,		|
+// and future compatibility with clients and tests.								|
+// ==============================================================================
+
 // Maximum allowed payload size for DATA frames.
 // If exceeded, the Hub must return ERR_13 (Payload Too Large).
 const maxPayloadBytes = 2048

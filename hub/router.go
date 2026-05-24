@@ -10,12 +10,11 @@ import (
 
 	"github.com/gabbla05/KittyProtocol/internal/protection"
 	"github.com/gabbla05/KittyProtocol/protocol"
-	"github.com/quic-go/quic-go"
 )
 
 // routeData forwards a DATA frame from sender → receiver.
 // Returns true on success, false if delivery failed.
-func routeData(frame protocol.DataFrame, sender *protection.Session, senderStream *quic.Stream) bool {
+func routeData(frame protocol.DataFrame, sender *protection.Session, senderStream protection.Stream) bool {
 	targetSess, ok := globalSessions.Get(frame.Target)
 	// router.go — poprawiony fragment
 	if !ok {

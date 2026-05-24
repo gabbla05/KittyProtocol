@@ -17,4 +17,6 @@
 - Uważać czy wszędzie gdzie trzeba jest:
     _ "github.com/lib/pq"   !!!!!
 
-- 
+- przeneisienie uruchomienia klienta do cmd
+- możliwość usunięcia konta poprzez /delete lub /remove z opcją \<user\> i wtedy powinno poprosić o uwierzytelnienie (wpisanie hasła do logowania w ramach zatwerdzenia). Po zakończeniu operacji powinno wyjść jak za pomocą /quit + usunąć rekord z userem z bazy danych
+- update cross-networkowych rzeczy (przetestowanie i markdown update)

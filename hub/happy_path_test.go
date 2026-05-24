@@ -4,13 +4,9 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
-	"os"
 	"testing"
 	"time"
 
-	"github.com/gabbla05/KittyProtocol/internal/auth"
-	"github.com/gabbla05/KittyProtocol/internal/certmanager"
-	"github.com/gabbla05/KittyProtocol/internal/protection"
 	"github.com/gabbla05/KittyProtocol/protocol"
 	"github.com/quic-go/quic-go"
 )
@@ -18,52 +14,22 @@ import (
 // TestHappyPathE2E verifies the full end‑to‑end flow of the KittyProtocol Hub:
 // 1. HELLO → MEOW_OK
 // 2. AUTH → MEOW_OK
-// 3. DATA routing between authenticated users
-// 4. ACK delivery confirmation
+// 3. DATA routing from Alice → Bob
+// 4. ACK confirmation back to Alice
 //
-// This test uses a mock authentication backend and an in‑memory QUIC listener.
-// It does NOT test TLS correctness — only QUIC transport and protocol logic.
+// This test runs against an isolated Hub instance created by StartTestHub(),
+// ensuring no interference with global state or other tests.
 func TestHappyPathE2E(t *testing.T) {
-
-	// Reset global state (Hub uses package‑level singletons)
-	globalSessions = protection.NewSessionManager()
-	globalAuth = auth.NewMockAuth() // mock DB with alice/secret, bob/password
-
-	// Ensure certs directory exists (relative to project root)
-	err := os.MkdirAll("../certs", 0755)
+	// Start isolated Hub instance
+	addr, stop, err := StartTestHub()
 	if err != nil {
-		t.Fatalf("Failed to create certs directory: %v", err)
+		t.Fatalf("Failed to start test Hub: %v", err)
 	}
-
-	// Load TLS certificates for QUIC
-	tlsConf, err := certmanager.SetupTLSConfig("../certs/cert.pem", "../certs/key.pem")
-	if err != nil {
-		t.Fatalf("TLS setup failed: %v", err)
-	}
-
-	// Start Hub QUIC listener on random port
-	listener, err := quic.ListenAddr("127.0.0.1:0", tlsConf, &quic.Config{
-		KeepAlivePeriod: 1 * time.Second,
-	})
-	if err != nil {
-		t.Fatalf("Failed to start listener: %v", err)
-	}
-	defer listener.Close()
-
-	// Hub accept loop (simulates Start(), but without TLS/DB/env)
-	go func() {
-		for {
-			conn, err := listener.Accept(context.Background())
-			if err != nil {
-				return
-			}
-			go handleClient(conn)
-		}
-	}()
+	defer stop()
 
 	// Client QUIC config
 	clientTLS := &tls.Config{
-		InsecureSkipVerify: true, // acceptable for local integration test
+		InsecureSkipVerify: true,
 		NextProtos:         []string{"kitty-quic-v1"},
 	}
 
@@ -71,7 +37,7 @@ func TestHappyPathE2E(t *testing.T) {
 	// 1. ALICE CONNECTS AND AUTHENTICATES
 	// ============================================================
 
-	aliceConn, err := quic.DialAddr(context.Background(), listener.Addr().String(), clientTLS, nil)
+	aliceConn, err := quic.DialAddr(context.Background(), addr, clientTLS, nil)
 	if err != nil {
 		t.Fatalf("Alice connection failed: %v", err)
 	}
@@ -121,7 +87,7 @@ func TestHappyPathE2E(t *testing.T) {
 	// 2. BOB CONNECTS AND AUTHENTICATES
 	// ============================================================
 
-	bobConn, err := quic.DialAddr(context.Background(), listener.Addr().String(), clientTLS, nil)
+	bobConn, err := quic.DialAddr(context.Background(), addr, clientTLS, nil)
 	if err != nil {
 		t.Fatalf("Bob connection failed: %v", err)
 	}
