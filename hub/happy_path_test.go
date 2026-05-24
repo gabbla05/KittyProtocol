@@ -8,34 +8,49 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gabbla05/KittyProtocol/internal/auth"
 	"github.com/gabbla05/KittyProtocol/internal/certmanager"
 	"github.com/gabbla05/KittyProtocol/internal/protection"
 	"github.com/gabbla05/KittyProtocol/protocol"
 	"github.com/quic-go/quic-go"
 )
 
+// TestHappyPathE2E verifies the full end‑to‑end flow of the KittyProtocol Hub:
+// 1. HELLO → MEOW_OK
+// 2. AUTH → MEOW_OK
+// 3. DATA routing between authenticated users
+// 4. ACK delivery confirmation
+//
+// This test uses a mock authentication backend and an in‑memory QUIC listener.
+// It does NOT test TLS correctness — only QUIC transport and protocol logic.
 func TestHappyPathE2E(t *testing.T) {
-	// Inicjalizacja globalnej mapy sesji (Task 5 / Task 9)
-	globalSessions = protection.NewSessionManager()
 
-	// Przygotowanie certyfikatów TLS (Task 32)
+	// Reset global state (Hub uses package‑level singletons)
+	globalSessions = protection.NewSessionManager()
+	globalAuth = auth.NewMockAuth() // mock DB with alice/secret, bob/password
+
+	// Ensure certs directory exists (relative to project root)
 	err := os.MkdirAll("../certs", 0755)
 	if err != nil {
-		t.Fatalf("Nie udało się utworzyć folderu certs: %v", err)
-	}
-	tlsConf, err := certmanager.SetupTLSConfig("../certs/cert.pem", "../certs/key.pem")
-	if err != nil {
-		t.Fatalf("Błąd konfiguracji TLS: %v", err)
+		t.Fatalf("Failed to create certs directory: %v", err)
 	}
 
-	// Uruchomienie listenera Huba
-	listener, err := quic.ListenAddr("127.0.0.1:0", tlsConf, nil)
+	// Load TLS certificates for QUIC
+	tlsConf, err := certmanager.SetupTLSConfig("../certs/cert.pem", "../certs/key.pem")
 	if err != nil {
-		t.Fatalf("Błąd uruchamiania listenera: %v", err)
+		t.Fatalf("TLS setup failed: %v", err)
+	}
+
+	// Start Hub QUIC listener on random port
+	listener, err := quic.ListenAddr("127.0.0.1:0", tlsConf, &quic.Config{
+		KeepAlivePeriod: 1 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("Failed to start listener: %v", err)
 	}
 	defer listener.Close()
 
-	// Nasłuchiwanie w tle (Task 4)
+	// Hub accept loop (simulates Start(), but without TLS/DB/env)
 	go func() {
 		for {
 			conn, err := listener.Accept(context.Background())
@@ -46,112 +61,137 @@ func TestHappyPathE2E(t *testing.T) {
 		}
 	}()
 
+	// Client QUIC config
 	clientTLS := &tls.Config{
-		InsecureSkipVerify: true, // Akceptowalne dla lokalnego testu integracyjnego
+		InsecureSkipVerify: true, // acceptable for local integration test
 		NextProtos:         []string{"kitty-quic-v1"},
 	}
 
-	// ==========================================
-	// KROK 1: Podłączenie i logowanie Alice
-	// ==========================================
+	// ============================================================
+	// 1. ALICE CONNECTS AND AUTHENTICATES
+	// ============================================================
+
 	aliceConn, err := quic.DialAddr(context.Background(), listener.Addr().String(), clientTLS, nil)
 	if err != nil {
-		t.Fatalf("Błąd połączenia Alice: %v", err)
+		t.Fatalf("Alice connection failed: %v", err)
 	}
 	defer aliceConn.CloseWithError(0, "")
+
 	aliceStream, err := aliceConn.OpenStreamSync(context.Background())
 	if err != nil {
-		t.Fatalf("Błąd strumienia Alice: %v", err)
+		t.Fatalf("Alice stream failed: %v", err)
 	}
 
-	// Alice: HELLO
+	bufA := make([]byte, 4096)
+
+	// HELLO
 	aliceHello := protocol.HelloFrame{
-		BaseFrame: protocol.BaseFrame{Type: "HELLO", MsgID: time.Now().UnixMilli()},
+		BaseFrame: protocol.BaseFrame{Type: protocol.FrameTypeHello, MsgID: 1},
 		Version:   "1.0",
 	}
 	b, _ := json.Marshal(aliceHello)
 	aliceStream.Write(b)
-	bufA := make([]byte, 2048)
-	aliceStream.Read(bufA) // Odbiór MEOW_OK
 
-	// Alice: AUTH
+	n, _ := aliceStream.Read(bufA)
+	var helloAck protocol.MeowOkFrame
+	json.Unmarshal(bufA[:n], &helloAck)
+
+	if helloAck.Type != protocol.FrameTypeMeowOK {
+		t.Fatalf("Alice expected MEOW_OK after HELLO, got: %s", helloAck.Type)
+	}
+
+	// AUTH
 	aliceAuth := protocol.AuthFrame{
-		BaseFrame: protocol.BaseFrame{Type: "AUTH", MsgID: time.Now().UnixMilli()},
+		BaseFrame: protocol.BaseFrame{Type: protocol.FrameTypeAuth, MsgID: 2},
 		User:      "alice",
-		Pass:      "secret", // Hasło z mock DB
+		Pass:      "secret",
 	}
 	b, _ = json.Marshal(aliceAuth)
 	aliceStream.Write(b)
-	aliceStream.Read(bufA) // Odbiór MEOW_OK("Logged in")
 
-	// ==========================================
-	// KROK 2: Podłączenie i logowanie Boba
-	// ==========================================
+	n, _ = aliceStream.Read(bufA)
+	var authAck protocol.MeowOkFrame
+	json.Unmarshal(bufA[:n], &authAck)
+
+	if authAck.Status != "Logged in" {
+		t.Fatalf("Alice AUTH failed, status: %s", authAck.Status)
+	}
+
+	// ============================================================
+	// 2. BOB CONNECTS AND AUTHENTICATES
+	// ============================================================
+
 	bobConn, err := quic.DialAddr(context.Background(), listener.Addr().String(), clientTLS, nil)
 	if err != nil {
-		t.Fatalf("Błąd połączenia Boba: %v", err)
+		t.Fatalf("Bob connection failed: %v", err)
 	}
 	defer bobConn.CloseWithError(0, "")
+
 	bobStream, err := bobConn.OpenStreamSync(context.Background())
 	if err != nil {
-		t.Fatalf("Błąd strumienia Boba: %v", err)
+		t.Fatalf("Bob stream failed: %v", err)
 	}
 
-	// Bob: HELLO
+	bufB := make([]byte, 4096)
+
+	// HELLO
 	bobHello := protocol.HelloFrame{
-		BaseFrame: protocol.BaseFrame{Type: "HELLO", MsgID: time.Now().UnixMilli()},
+		BaseFrame: protocol.BaseFrame{Type: protocol.FrameTypeHello, MsgID: 3},
 		Version:   "1.0",
 	}
 	b, _ = json.Marshal(bobHello)
 	bobStream.Write(b)
-	bufB := make([]byte, 2048)
 	bobStream.Read(bufB)
 
-	// Bob: AUTH
+	// AUTH
 	bobAuth := protocol.AuthFrame{
-		BaseFrame: protocol.BaseFrame{Type: "AUTH", MsgID: time.Now().UnixMilli()},
+		BaseFrame: protocol.BaseFrame{Type: protocol.FrameTypeAuth, MsgID: 4},
 		User:      "bob",
-		Pass:      "password", // Hasło z mock DB
+		Pass:      "password",
 	}
 	b, _ = json.Marshal(bobAuth)
 	bobStream.Write(b)
-	bobStream.Read(bufB) // Odbiór MEOW_OK("Logged in")
+	bobStream.Read(bufB)
 
-	// ==========================================
-	// KROK 3: Alice wysyła DATA do Boba
-	// ==========================================
+	// ============================================================
+	// 3. ALICE SENDS DATA → BOB
+	// ============================================================
+
 	msgID := time.Now().UnixMilli()
 	dataFrame := protocol.DataFrame{
-		BaseFrame: protocol.BaseFrame{Type: "DATA", MsgID: msgID},
+		BaseFrame: protocol.BaseFrame{Type: protocol.FrameTypeData, MsgID: msgID},
 		Target:    "bob",
-		Payload:   "SGVsbG8gQm9iIQ==", // Zakodowane Base64 (np. z E2EE)
+		Payload:   "SGVsbG8gQm9iIQ==",
 		MAC:       "dummy_mac_123",
 	}
 	b, _ = json.Marshal(dataFrame)
 	aliceStream.Write(b)
 
-	// Alice powinna dostać MEOW_OK ("Delivered (mock)") od Huba
-	nA, _ := aliceStream.Read(bufA)
+	// Alice receives ACK
+	n, _ = aliceStream.Read(bufA)
 	var aliceAck protocol.MeowOkFrame
-	json.Unmarshal(bufA[:nA], &aliceAck)
+	json.Unmarshal(bufA[:n], &aliceAck)
 
-	if aliceAck.Type != "MEOW_OK" {
-		t.Errorf("Alice oczekiwała MEOW_OK, otrzymała typ: %s", aliceAck.Type)
+	if aliceAck.Status != "Delivered" {
+		t.Fatalf("Alice expected Delivered ACK, got: %s", aliceAck.Status)
 	}
 
-	// ==========================================
-	// KROK 4: Bob odbiera zroutowaną wiadomość
-	// ==========================================
-	nB, err := bobStream.Read(bufB)
+	// ============================================================
+	// 4. BOB RECEIVES FORWARDED DATA
+	// ============================================================
+
+	n, err = bobStream.Read(bufB)
 	if err != nil {
-		t.Fatalf("Bob nie odczytał zroutowanej wiadomości: %v", err)
+		t.Fatalf("Bob failed to read DATA: %v", err)
 	}
 
 	var bobRecv protocol.DataFrame
-	json.Unmarshal(bufB[:nB], &bobRecv)
+	json.Unmarshal(bufB[:n], &bobRecv)
 
-	// Hub podczas routingu powinien dokleić pole Sender (Task 7)
-	if bobRecv.Type != "DATA" || bobRecv.Sender != "alice" || bobRecv.Payload != "SGVsbG8gQm9iIQ==" {
-		t.Errorf("Bob otrzymał niepoprawną ramkę: %s", string(bufB[:nB]))
+	if bobRecv.Sender != "alice" {
+		t.Fatalf("Bob expected Sender=alice, got: %s", bobRecv.Sender)
+	}
+	if bobRecv.Payload != "SGVsbG8gQm9iIQ==" {
+		t.Fatalf("Bob received wrong payload")
 	}
 }
