@@ -1,8 +1,11 @@
-package main
+// router.go
+// Implements DATA frame forwarding between authenticated sessions.
+// This file contains no protocol parsing — only delivery logic.
+
+package hub
 
 import (
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/gabbla05/KittyProtocol/internal/protection"
@@ -10,24 +13,31 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
+// routeData forwards a DATA frame from sender → receiver.
+// Returns true on success, false if delivery failed.
 func routeData(frame protocol.DataFrame, sender *protection.Session, senderStream *quic.Stream) bool {
 	targetSess, ok := globalSessions.Get(frame.Target)
 	if !ok {
-		sendError(senderStream, "ERR_15", "Receiver offline")
+		// ERR_08 — Delivery Failed – Recipient Offline
+		sendError(senderStream, protocol.ErrDeliveryFailedOffline, "Receiver offline")
 		return false
 	}
 
 	if targetSess.Stream == nil {
-		sendError(senderStream, "ERR_10", "Receiver stream not available")
+		// ERR_05 — Session Error (receiver session corrupted)
+		sendError(senderStream, protocol.ErrSessionError, "Receiver stream not available")
 		return false
 	}
 
-	sender.LastActive = time.Now()
-	targetSess.LastActive = time.Now()
+	// Update activity timestamps
+	now := time.Now()
+	sender.LastActive = now
+	targetSess.LastActive = now
 
+	// Build forwarded DATA frame
 	forward := protocol.DataFrame{
 		BaseFrame: protocol.BaseFrame{
-			Type:  "DATA",
+			Type:  protocol.FrameTypeData,
 			MsgID: frame.MsgID,
 		},
 		Sender:  sender.ID,
@@ -38,14 +48,14 @@ func routeData(frame protocol.DataFrame, sender *protection.Session, senderStrea
 
 	fb, err := json.Marshal(forward)
 	if err != nil {
-		fmt.Println("[Hub: Router] Failed to marshal forwarded DATA:", err)
-		sendError(senderStream, "ERR_02", "Failed to marshal forwarded DATA")
+		logError("[Router] Failed to marshal forwarded DATA: %v", err)
+		sendError(senderStream, protocol.ErrFormatError, "Failed to marshal forwarded DATA")
 		return false
 	}
 
 	if _, err := targetSess.Stream.Write(fb); err != nil {
-		fmt.Println("[Hub: Router] Failed to deliver DATA:", err)
-		sendError(senderStream, "ERR_10", "Failed to deliver to receiver")
+		logError("[Router] Failed to deliver DATA: %v", err)
+		sendError(senderStream, protocol.ErrSessionError, "Failed to deliver to receiver")
 		return false
 	}
 

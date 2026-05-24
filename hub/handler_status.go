@@ -1,8 +1,10 @@
-package main
+// handler_status.go
+// Handles GET_STATUS — checks whether a target user is online.
+
+package hub
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	"github.com/gabbla05/KittyProtocol/protocol"
@@ -10,21 +12,20 @@ import (
 
 func (c *clientContext) handleGetStatus(raw []byte) {
 	if c.state != stateAuthenticated {
-		sendError(c.stream, "ERR_02", "GET_STATUS not allowed before AUTH")
+		sendError(c.stream, protocol.ErrProtocolViolation, "GET_STATUS not allowed before AUTH")
 		return
 	}
 
 	frame, err := protocol.ParseGetStatusFrame(raw)
 	if err != nil {
-		sendError(c.stream, "ERR_02", err.Error())
+		sendError(c.stream, protocol.ErrFormatError, err.Error())
 		return
 	}
 
 	target := strings.ToLower(strings.TrimSpace(frame.Target))
 
-	online := globalSessions.IsOnline(target)
 	status := "offline"
-	if online {
+	if globalSessions.IsOnline(target) {
 		status = "online"
 	}
 
@@ -39,11 +40,11 @@ func (c *clientContext) handleGetStatus(raw []byte) {
 
 	b, err := json.Marshal(res)
 	if err != nil {
-		sendError(c.stream, "ERR_02", "Failed to marshal STATUS_RES")
+		sendError(c.stream, protocol.ErrFormatError, "Failed to marshal STATUS_RES")
 		return
 	}
 
 	if _, err := c.stream.Write(b); err != nil {
-		fmt.Println("[Hub: Status] Failed to send STATUS_RES:", err)
+		logError("[STATUS] Failed to send STATUS_RES: %v", err)
 	}
 }

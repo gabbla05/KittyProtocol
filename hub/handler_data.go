@@ -1,8 +1,10 @@
-package main
+// handler_data.go
+// Handles DATA frames — encrypted message delivery between authenticated users.
+
+package hub
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	"github.com/gabbla05/KittyProtocol/protocol"
@@ -14,51 +16,61 @@ func canonicalTarget(t string) string {
 
 func (c *clientContext) handleData(raw []byte) {
 	if c.state != stateAuthenticated {
-		sendError(c.stream, "ERR_02", "DATA not allowed before AUTH")
+		sendError(c.stream, protocol.ErrProtocolViolation, "DATA not allowed before AUTH")
 		return
 	}
 
 	frame, err := protocol.ParseDataFrame(raw)
 	if err != nil {
-		sendError(c.stream, "ERR_02", err.Error())
+		sendError(c.stream, protocol.ErrFormatError, err.Error())
 		return
 	}
 
+	// Normalize target username
 	frame.Target = canonicalTarget(frame.Target)
 
+	// Sanity check
 	if c.session == nil {
-		sendError(c.stream, "ERR_01", "DATA before AUTH")
+		sendError(c.stream, protocol.ErrProtocolViolation, "DATA before AUTH")
 		return
 	}
 
+	// Rate limit
 	if !c.session.Limiter.Allow() {
-		sendError(c.stream, "ERR_07", "Rate limit exceeded")
+		sendError(c.stream, protocol.ErrRateLimitExceeded, "Rate limit exceeded")
 		return
 	}
 
+	// Replay protection
 	if c.session.Replay.MarkAndCheck(frame.MsgID) {
-		sendError(c.stream, "ERR_06", "Replay detected")
+		sendError(c.stream, protocol.ErrReplayDetected, "Replay detected")
 		return
 	}
 
+	// Update activity
 	c.touch()
 
+	// Route message
 	if !routeData(*frame, c.session, c.stream) {
 		return
 	}
 
+	// Send ACK
 	ack := protocol.MeowOkFrame{
 		BaseFrame: protocol.BaseFrame{
-			Type:  "MEOW_OK",
+			Type:  protocol.FrameTypeMeowOK,
 			MsgID: frame.MsgID,
 		},
 		Status: "Delivered",
 	}
 
 	b, err := json.Marshal(ack)
-	if err == nil {
-		c.stream.Write(b)
-	} else {
-		fmt.Println("[Hub: Data] Failed to marshal ACK:", err)
+	if err != nil {
+		logError("[DATA] Failed to marshal ACK: %v", err)
+		return
+	}
+
+	if _, err := c.stream.Write(b); err != nil {
+		logError("[DATA] Failed to send ACK: %v", err)
 	}
 }

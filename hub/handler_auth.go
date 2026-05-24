@@ -1,45 +1,58 @@
-package main
+// handler_auth.go
+// Handles the AUTH frame — the second step of the KittyProtocol handshake.
+// After successful authentication, a session is created and the client enters
+// the stateAuthenticated state.
+
+package hub
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"github.com/gabbla05/KittyProtocol/internal/protection"
 	"github.com/gabbla05/KittyProtocol/protocol"
 )
 
+// handleAuth processes an AUTH frame after a successful HELLO.
+// Expected state: stateHelloReceived → stateAuthenticated.
 func (c *clientContext) handleAuth(raw []byte) {
 	if c.state != stateHelloReceived {
-		sendError(c.stream, "ERR_02", "AUTH not allowed before HELLO")
+		sendError(c.stream, protocol.ErrProtocolViolation, "AUTH not allowed before HELLO")
 		return
 	}
 
 	frame, err := protocol.ParseAuthFrame(raw)
 	if err != nil {
-		sendError(c.stream, "ERR_02", err.Error())
+		sendError(c.stream, protocol.ErrFormatError, err.Error())
 		return
 	}
 
+	// Stop AUTH timeout
 	if c.authTimer != nil {
 		c.authTimer.Stop()
 		c.authTimer = nil
 	}
 
+	// Validate credentials
 	if !globalAuth.CheckCredentials(frame.User, frame.Pass) {
-		sendError(c.stream, "ERR_04", "Authentication failed")
+		sendError(c.stream, protocol.ErrAuthenticationFailed, "Authentication failed")
 		return
 	}
 
+	// Prevent duplicate logins
 	if globalSessions.IsOnline(frame.User) {
-		sendError(c.stream, "ERR_05", "User already logged in")
+		sendError(c.stream, protocol.ErrSessionError, "User already logged in")
 		return
 	}
 
+	// Create session
 	c.session = protection.NewSession(frame.User, c.conn, c.stream)
 	globalSessions.Add(frame.User, c.session)
 	c.username = frame.User
 	c.state = stateAuthenticated
 
+	logInfo("[AUTH] User '%s' authenticated successfully", frame.User)
+
+	// Send MEOW_OK
 	ok := protocol.MeowOkFrame{
 		BaseFrame: protocol.BaseFrame{
 			Type:  protocol.FrameTypeMeowOK,
@@ -49,44 +62,12 @@ func (c *clientContext) handleAuth(raw []byte) {
 	}
 
 	b, err := json.Marshal(ok)
-	if err == nil {
-		_, _ = c.stream.Write(b)
-	} else {
-		fmt.Println("[Hub: Auth] Failed to marshal MEOW_OK:", err)
-	}
-}
-
-func (c *clientContext) handleRegister(raw []byte) {
-	if c.state != stateHelloReceived {
-		sendError(c.stream, "ERR_02", "REGISTER not allowed before HELLO")
-		return
-	}
-
-	frame, err := protocol.ParseRegisterFrame(raw)
 	if err != nil {
-		sendError(c.stream, "ERR_02", err.Error())
+		logError("[AUTH] Failed to marshal MEOW_OK: %v", err)
 		return
 	}
 
-	// Rejestracja NIE tworzy sesji i NIE loguje użytkownika.
-	// Klient po udanej rejestracji powinien wykonać osobne AUTH.
-	if err := globalAuth.Register(frame.User, frame.Pass); err != nil {
-		sendError(c.stream, "ERR_06", err.Error())
-		return
-	}
-
-	ok := protocol.MeowOkFrame{
-		BaseFrame: protocol.BaseFrame{
-			Type:  protocol.FrameTypeMeowOK,
-			MsgID: frame.MsgID,
-		},
-		Status: "Registered",
-	}
-
-	b, err := json.Marshal(ok)
-	if err == nil {
-		_, _ = c.stream.Write(b)
-	} else {
-		fmt.Println("[Hub: Register] Failed to marshal MEOW_OK:", err)
+	if _, err := c.stream.Write(b); err != nil {
+		logError("[AUTH] Failed to send MEOW_OK: %v", err)
 	}
 }

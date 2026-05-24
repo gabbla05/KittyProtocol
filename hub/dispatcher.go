@@ -1,4 +1,9 @@
-package main
+// dispatcher.go
+// Central QUIC stream dispatcher. Reads raw frames from the client stream,
+// determines their type, and forwards them to the appropriate handler.
+// This file contains no business logic — only frame routing and connection lifecycle.
+
+package hub
 
 import (
 	"context"
@@ -23,7 +28,8 @@ func handleClient(conn *quic.Conn) {
 	}
 	defer ctx.cleanup()
 
-	buf := make([]byte, 8192)
+	buf := make([]byte, readBufferSize)
+	formatErrCount := 0
 
 	for {
 		n, err := stream.Read(buf)
@@ -36,13 +42,25 @@ func handleClient(conn *quic.Conn) {
 
 		raw := buf[:n]
 
+		// Determine frame type
 		typeName, msgID, perr := protocol.GetFrameType(raw)
 		if perr != nil || msgID <= 0 {
-			sendError(stream, "ERR_02", "Invalid frame header")
+			formatErrCount++
+			sendError(stream, protocol.ErrFormatError, "Invalid frame header")
+
+			if formatErrCount >= maxFormatErrors {
+				logWarn("Too many malformed frames from client — closing connection")
+				return
+			}
 			continue
 		}
 
+		// Reset format error counter on valid frame
+		formatErrCount = 0
+
+		// Dispatch to handler
 		switch typeName {
+
 		case protocol.FrameTypeHello:
 			ctx.handleHello(raw)
 
@@ -66,7 +84,7 @@ func handleClient(conn *quic.Conn) {
 			return
 
 		default:
-			sendError(stream, "ERR_02", "Unknown frame type")
+			sendError(stream, protocol.ErrFormatError, "Unknown frame type")
 		}
 	}
 }

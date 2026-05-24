@@ -11,3 +11,10 @@
 - forma przechowywania sekretóœ lokalnie - słabe szyfrowanie chyba bo widać że sekrety są te same. Zamiast tego zastanowić się nad hashowaniem
 
 - !!!!WAŻNE!!! plik ze stałymi (W tym z dokumentacji) aby w kodzie nie używać magicznych liczb, ale konkretnych stałych
+
+- SENSOWNOŚĆ CERTYFIKATÓW!
+
+- Uważać czy wszędzie gdzie trzeba jest:
+    _ "github.com/lib/pq"   !!!!!
+
+- 
