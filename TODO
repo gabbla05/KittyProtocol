@@ -1,14 +1,16 @@
 - przy prezentowaniu gotowego projektu można pokazać że na warstwie protokołu działa operacja /replay która symuluje ten atak
-- TESTY OGÓLNIE - LEPIEJ POMYŚLANE, MOŻĘ JAKOŚ LEPIEJ USTRUKTURYZOWAĆ
-- ŁADOWANIE KLUCZY KONWERSACJI Z PLIKU!
-- brak mockowania!! zrobic w końcu normalne połączenie z bazą danych i tam przechowywanie, a nie tak jak teraz `internal/auth/auth.go`
-- sprawdzić czy kody błędów się zgadzają z dokumentacją
+
+
 - info dodatkowe:
     jak nie ma usera to gdy pytamy o jego status, to mimo to pokazuje offline gdy pytamy czy jest - brak zdradzania czy user istnieje
-- CURRENT_PROJECT do zmiany
-- dać kroki dla dewelopera któ©y ma stestować działanie bazy - jakie komendy, co usunąć itp.
-- jaki jest sens registerFrame zamiast po prostu zrobić parse registerframe na authframe skoro to dosłownie ta sama ramka
-- forma przechowywania sekretóœ lokalnie - słabe szyfrowanie chyba bo widać że sekrety są te same. Zamiast tego zastanowić się nad hashowaniem
+- CURRENT_PROJECT do zmiany i ogólnie inne markdowny też
+- dać kroki dla dewelopera który ma stestować działanie bazy - jakie komendy, co usunąć itp.
+
+- deweloperom dać znać że sekrety są zapisywane lokalnie w katalogu domowym
+
+CLIENT
+======
+- forma przechowywania sekretów lokalnie - słabe szyfrowanie chyba bo widać że sekrety są te same. Zamiast tego zastanowić się nad hashowaniem
 
 - !!!!WAŻNE!!! plik ze stałymi (W tym z dokumentacji) aby w kodzie nie używać magicznych liczb, ale konkretnych stałych
 
@@ -17,6 +19,16 @@
 - Uważać czy wszędzie gdzie trzeba jest:
     _ "github.com/lib/pq"   !!!!!
 
-- przeneisienie uruchomienia klienta do cmd
 - możliwość usunięcia konta poprzez /delete lub /remove z opcją \<user\> i wtedy powinno poprosić o uwierzytelnienie (wpisanie hasła do logowania w ramach zatwerdzenia). Po zakończeniu operacji powinno wyjść jak za pomocą /quit + usunąć rekord z userem z bazy danych
+
 - update cross-networkowych rzeczy (przetestowanie i markdown update)
+
+- kolorowa konsola klienta
+
+- dlaczego [Client: Receive] Parse error: ERR_02: JSON parsing error przy wysyłaniu do samego siebie, powinna być możliwość zablokowania wysyłania do siebie 
+
+- TESTY OGÓLNIE - LEPIEJ POMYŚLANE, MOŻĘ JAKOŚ LEPIEJ USTRUKTURYZOWAĆ
+
+- ŁADOWANIE KLUCZY KONWERSACJI Z PLIKU! (opcjonalnie na końcu)
+
+- gotowe pod frontend
