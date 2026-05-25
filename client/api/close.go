@@ -3,6 +3,7 @@ package api
 import (
 	"github.com/gabbla05/KittyProtocol/internal/cryptoee"
 	"github.com/gabbla05/KittyProtocol/internal/protection"
+	"github.com/quic-go/quic-go"
 )
 
 // Close gracefully shuts down the client and securely clears all sensitive data.
@@ -39,8 +40,9 @@ func (c *KittyClient) Close() {
 
 	// Forcefully interrupt any blocking Read/Write
 	if c.stream != nil {
-		c.stream.CancelRead(0)
-		c.stream.CancelWrite(0)
+		// QUIC-specific error code 0 is fine here; semantics are "no specific error".
+		c.stream.CancelRead(quic.StreamErrorCode(0))
+		c.stream.CancelWrite(quic.StreamErrorCode(0))
 	}
 
 	// Close stream

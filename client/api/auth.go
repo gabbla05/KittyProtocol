@@ -14,12 +14,9 @@ import (
 // -----------------------------------------------------------------------------
 
 func (c *KittyClient) SendAuth(user, pass string) error {
-	c.mu.Lock()
-	stream := c.stream
-	c.mu.Unlock()
-
-	if stream == nil {
-		return errors.New("stream is nil")
+	stream, err := c.ensureConnected()
+	if err != nil {
+		return err
 	}
 
 	frame := protocol.AuthFrame{
@@ -58,12 +55,9 @@ func (c *KittyClient) WaitForAuthOK() error {
 // -----------------------------------------------------------------------------
 
 func (c *KittyClient) SendRegister(user, pass string) error {
-	c.mu.Lock()
-	stream := c.stream
-	c.mu.Unlock()
-
-	if stream == nil {
-		return errors.New("stream is nil")
+	stream, err := c.ensureConnected()
+	if err != nil {
+		return err
 	}
 
 	frame := protocol.AuthFrame{
@@ -105,7 +99,7 @@ func (c *KittyClient) waitOkOrError() (bool, string) {
 		return false, "NO_STREAM"
 	}
 
-	buf := make([]byte, 4096)
+	buf := make([]byte, defaultRecvBufferSize)
 	n, err := stream.Read(buf)
 	if err != nil {
 		return false, "READ_ERROR"

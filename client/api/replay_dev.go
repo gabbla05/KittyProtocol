@@ -1,14 +1,13 @@
-package api
+//go:build dev
+// +build dev
 
-// ====================================================
-// DELETE THIS FILE AND ITS USAGE FOR PRODCUTION BUILDS
-// ====================================================
+package api
 
 import "fmt"
 
 // ReplayLastFrame resends the last raw frame written to the stream.
-// This is used exclusively for replay protection testing and should not be
-// exposed in production builds.
+// This is used exclusively for replay protection testing and is compiled
+// only in dev builds.
 func (c *KittyClient) ReplayLastFrame() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()

@@ -9,6 +9,14 @@ import (
 )
 
 func (c *KittyClient) SendHello() error {
+	c.mu.Lock()
+	stream := c.stream
+	c.mu.Unlock()
+
+	if stream == nil {
+		return fmt.Errorf("stream is nil")
+	}
+
 	frame := protocol.HelloFrame{
 		BaseFrame: protocol.BaseFrame{
 			Type:  protocol.FrameTypeHello,
@@ -22,8 +30,7 @@ func (c *KittyClient) SendHello() error {
 		return fmt.Errorf("failed to marshal HELLO: %w", err)
 	}
 
-	_, err = c.stream.Write(b)
-	if err != nil {
+	if _, err := stream.Write(b); err != nil {
 		return fmt.Errorf("failed to send HELLO: %w", err)
 	}
 
@@ -49,7 +56,7 @@ func (c *KittyClient) waitHelloOK() (bool, string) {
 		return false, "NO_STREAM"
 	}
 
-	buf := make([]byte, 4096)
+	buf := make([]byte, defaultRecvBufferSize)
 	n, err := stream.Read(buf)
 	if err != nil {
 		return false, "READ_ERROR"

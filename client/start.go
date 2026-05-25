@@ -10,11 +10,12 @@ import (
 	"github.com/gabbla05/KittyProtocol/client/ui_cli"
 )
 
-// Start is the main entrypoint for the KittyProtocol CLI client.
-// It performs connection, HELLO handshake, AUTH flow, and launches the app.
 func Start() {
 	client := api.NewKittyClient()
 	ui := ui_cli.NewCliUI(client)
+
+	// Ustaw logger CLI
+	api.SetLogger(ui_cli.CliLogger{})
 
 	disconnected := make(chan struct{})
 
@@ -36,24 +37,17 @@ func Start() {
 		return
 	}
 
-	// -------------------------------
-	// AUTH FLOW (CLI-specific)
-	// -------------------------------
+	// AUTH FLOW
 	if err := ui.RunAuthFlow(client); err == ui_cli.ErrQuitRequested {
 		client.Close()
 		return
 	}
 
-	// -------------------------------
-	// AUTH SUCCESS → start application
-	// -------------------------------
-
+	// AUTH SUCCESS
 	application := app.NewApp(client, ui, disconnected)
-
 	application.InitSecretStoreForUser(client.User())
 
 	client.RegisterAckHandler(ui)
-	client.RegisterAppPayloadHandler(application.HandleIncomingPayload)
 
 	setupSignalHandler(client)
 
@@ -65,7 +59,6 @@ func Start() {
 	client.Close()
 }
 
-// setupSignalHandler installs OS signal handlers for graceful shutdown.
 func setupSignalHandler(client *api.KittyClient) {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)

@@ -5,7 +5,6 @@ import (
 	"sync"
 
 	"github.com/gabbla05/KittyProtocol/internal/protection"
-	"github.com/quic-go/quic-go"
 )
 
 // ClientState represents the high-level lifecycle state of the client.
@@ -15,6 +14,16 @@ type ClientState int
 // AppPayloadHandler is a callback used by the application layer (client/app)
 // to receive decrypted DATA payloads from KittyClient.
 type AppPayloadHandler func(sender string, payload []byte)
+
+// ErrorHandler is invoked when the Hub sends an ERROR frame.
+type ErrorHandler func(code, desc string)
+
+// StatusHandler is invoked when the Hub sends a STATUS_RES frame.
+type StatusHandler func(target, status string)
+
+// DisconnectHandler is invoked when the underlying connection is closed
+// or the receiver loop terminates with an error.
+type DisconnectHandler func(err error)
 
 const (
 	StateDisconnected    ClientState = iota // No QUIC connection
@@ -36,9 +45,9 @@ type KittyClient struct {
 	mu    sync.Mutex
 	state ClientState
 
-	// QUIC transport
-	conn   *quic.Conn
-	stream *quic.Stream
+	// QUIC transport (wrapped in adapters for testability and GUI-friendliness)
+	conn   ConnAdapter
+	stream StreamAdapter
 
 	// Session metadata
 	user   string
@@ -60,6 +69,11 @@ type KittyClient struct {
 
 	// Application-level payload handler (chat, etc.)
 	appHandler AppPayloadHandler
+
+	// Event handlers for UI/frontends
+	errHandler        ErrorHandler
+	statusHandler     StatusHandler
+	disconnectHandler DisconnectHandler
 }
 
 // NewKittyClient creates a new client instance in the Disconnected state.
@@ -83,6 +97,24 @@ func (c *KittyClient) RegisterAppPayloadHandler(h AppPayloadHandler) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.appHandler = h
+}
+
+func (c *KittyClient) OnError(h ErrorHandler) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.errHandler = h
+}
+
+func (c *KittyClient) OnStatus(h StatusHandler) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.statusHandler = h
+}
+
+func (c *KittyClient) OnDisconnected(h DisconnectHandler) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.disconnectHandler = h
 }
 
 func (c *KittyClient) User() string {

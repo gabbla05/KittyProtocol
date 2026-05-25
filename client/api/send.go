@@ -16,30 +16,49 @@ func canonicalTarget(t string) string {
 	return strings.ToLower(strings.TrimSpace(t))
 }
 
+// ensureConnected returns current stream or an error if the client
+// is not in a usable state for sending frames.
+func (c *KittyClient) ensureConnected() (StreamAdapter, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.stream == nil {
+		return nil, ErrNoStream
+	}
+	if c.state == StateDisconnected {
+		return nil, ErrNotConnected
+	}
+	return c.stream, nil
+}
+
 // SendAppFrameEncrypted sends an application-level frame (chat control, text, etc.)
 // encrypted as a DATA frame. The Hub requires MAC for all DATA frames.
 func (c *KittyClient) SendAppFrameEncrypted(target string, payload []byte) error {
+	stream, err := c.ensureConnected()
+	if err != nil {
+		return err
+	}
+
+	if target == "" {
+		return ErrTargetNotSet
+	}
+
 	c.mu.Lock()
-	stream := c.stream
-	ackMgr := c.ackMgr
 	kEnc, kMac, ok := c.getKeysForPeer(target)
 	c.mu.Unlock()
 
 	if !ok {
-		return errors.New("no shared secret for target")
-	}
-	if stream == nil {
-		return errors.New("stream is nil")
-	}
-	if target == "" {
-		return errors.New("target not set")
+		return ErrNoSharedSecret
 	}
 
 	msgID := time.Now().UnixMilli()
 
+	c.mu.Lock()
+	ackMgr := c.ackMgr
 	if ackMgr != nil {
 		ackMgr.AddPending(msgID)
 	}
+	c.mu.Unlock()
 
 	canonTarget := canonicalTarget(target)
 
@@ -80,12 +99,13 @@ func (c *KittyClient) SendAppFrameEncrypted(target string, payload []byte) error
 
 // SendGetStatus sends a GET_STATUS frame for a given user.
 func (c *KittyClient) SendGetStatus(target string) error {
-	c.mu.Lock()
-	stream := c.stream
-	c.mu.Unlock()
+	stream, err := c.ensureConnected()
+	if err != nil {
+		return err
+	}
 
-	if stream == nil {
-		return errors.New("stream is nil")
+	if target == "" {
+		return ErrTargetNotSet
 	}
 
 	msgID := time.Now().UnixMilli()
@@ -109,12 +129,13 @@ func (c *KittyClient) SendGetStatus(target string) error {
 
 // SendBye sends a BYE frame to the Hub.
 func (c *KittyClient) SendBye() error {
-	c.mu.Lock()
-	stream := c.stream
-	c.mu.Unlock()
-
-	if stream == nil {
-		return errors.New("stream is nil")
+	stream, err := c.ensureConnected()
+	if err != nil {
+		// BYE jest „best-effort” — jeśli nie ma streama, nie robimy dramatu.
+		if errors.Is(err, ErrNoStream) || errors.Is(err, ErrNotConnected) {
+			return nil
+		}
+		return err
 	}
 
 	frame := protocol.BaseFrame{

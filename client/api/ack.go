@@ -33,11 +33,11 @@ type AckManager struct {
 	timeout  time.Duration
 }
 
-// NewAckManager creates a new manager with a default timeout of 5 seconds.
+// NewAckManager creates a new manager with a default timeout.
 func NewAckManager() *AckManager {
 	return &AckManager{
 		pending: make(map[int64]chan struct{}),
-		timeout: 5 * time.Second,
+		timeout: defaultAckTimeout,
 	}
 }
 

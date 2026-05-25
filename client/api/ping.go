@@ -28,7 +28,7 @@ func (c *KittyClient) StartPingLoop() {
 	}
 
 	go func() {
-		ticker := time.NewTicker(30 * time.Second)
+		ticker := time.NewTicker(defaultPingInterval)
 		defer ticker.Stop()
 
 		for {
