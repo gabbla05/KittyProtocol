@@ -12,6 +12,10 @@ func (a *App) StartChatRequest(target string) error {
 		return errors.New("target cannot be empty")
 	}
 
+	if target == a.client.User() {
+		return errors.New("cannot chat with yourself")
+	}
+
 	if active, peer := a.chatState.IsActive(); active {
 		return fmt.Errorf("chat already active with %s", peer)
 	}
@@ -33,6 +37,10 @@ func (a *App) AcceptChat(from string) error {
 		return errors.New("from cannot be empty")
 	}
 
+	if from == a.client.User() {
+		return errors.New("cannot chat with yourself")
+	}
+
 	if !a.chatState.HasPendingFrom(from) {
 		return fmt.Errorf("no pending chat request from %s", from)
 	}
@@ -51,6 +59,10 @@ func (a *App) AcceptChat(from string) error {
 func (a *App) RefuseChat(from, reason string) error {
 	if from == "" {
 		return errors.New("from cannot be empty")
+	}
+
+	if from == a.client.User() {
+		return errors.New("cannot chat with yourself")
 	}
 
 	if !a.chatState.HasPendingFrom(from) {
@@ -76,6 +88,10 @@ func (a *App) EndChat(reason string) error {
 		return errors.New("no active target")
 	}
 
+	if peer == a.client.User() {
+		return errors.New("cannot chat with yourself")
+	}
+
 	frame := NewChatEnd(a.client.User(), peer, reason)
 
 	if err := a.sendAppFrame(frame); err != nil {
@@ -92,11 +108,17 @@ func (a *App) SendTextMessage(text string) error {
 	}
 
 	active, peer := a.chatState.IsActive()
+
 	if !active {
 		return errors.New("chat not active")
 	}
+
 	if peer == "" {
 		return errors.New("no active target")
+	}
+
+	if peer == a.client.User() {
+		return errors.New("cannot chat with yourself")
 	}
 
 	frame := NewTextMessage(a.client.User(), peer, text)
