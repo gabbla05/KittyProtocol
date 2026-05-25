@@ -14,8 +14,22 @@ import (
 	"github.com/gabbla05/KittyProtocol/client/api"
 )
 
+const (
+	ColorReset  = "\033[0m"
+	ColorRed    = "\033[31m"
+	ColorGreen  = "\033[32m"
+	ColorBlue   = "\033[36m"
+	ColorPink   = "\033[95m"
+	ColorYellow = "\033[33m"
+
+	Prompt = ColorPink + "(=^._.^=) > " + ColorReset
+)
+
+func (ui *CliUI) Prompt() {
+	fmt.Print(Prompt)
+}
+
 // CliUI implements the UI interface required by the App layer.
-// It is intentionally minimal and synchronous.
 type CliUI struct {
 	client *api.KittyClient
 	reader *bufio.Reader
@@ -42,12 +56,12 @@ func (ui *CliUI) Println(v ...any) {
 	fmt.Println(v...)
 }
 
-// Print prints a line to stdout withou \n at the end.
+// Print prints without newline.
 func (ui *CliUI) Print(v ...any) {
 	fmt.Print(v...)
 }
 
-// Printf prints a formatted line to stdout.
+// Printf prints formatted text.
 func (ui *CliUI) Printf(format string, v ...any) {
 	fmt.Printf(format, v...)
 }
@@ -56,38 +70,37 @@ func (ui *CliUI) Printf(format string, v ...any) {
 
 // ReadCredentials prompts the user for login and password.
 func (ui *CliUI) ReadCredentials() (string, string) {
-	fmt.Print("Login: ")
+	fmt.Print(ColorBlue + "Login: " + ColorReset)
 	user, _ := ui.reader.ReadString('\n')
 
-	fmt.Print("Hasło: ")
+	fmt.Print(ColorBlue + "Hasło: " + ColorReset)
 	pass, _ := ui.reader.ReadString('\n')
 
 	return strings.TrimSpace(user), strings.TrimSpace(pass)
 }
 
 // ReadSharedSecret prompts the user for the E2EE shared secret.
-// It enforces non-empty input.
 func (ui *CliUI) ReadSharedSecret() []byte {
 	for {
-		fmt.Print("Wspólny sekret (K_AB) dla tej rozmowy: ")
+		fmt.Print(ColorYellow + "Wspólny sekret (K_AB): " + ColorReset)
 		secret, _ := ui.reader.ReadString('\n')
 		secret = strings.TrimSpace(secret)
 
 		if secret != "" {
 			return []byte(secret)
 		}
-		fmt.Println("[UI] Sekret nie może być pusty.")
+		fmt.Println(ColorRed + "[UI] Sekret nie może być pusty." + ColorReset)
 	}
 }
 
 // --- ACK event handlers ---
 
-// OnDelivered is called when the AckManager reports successful delivery.
 func (ui *CliUI) OnDelivered(msgID int64) {
-	fmt.Printf("\n[Delivered] msg_id=%d\n> ", msgID)
+	fmt.Printf(ColorGreen+"\n[Delivered] msg_id=%d\n"+ColorReset, msgID)
+	ui.Prompt()
 }
 
-// OnTimeout is called when the AckManager reports a delivery timeout.
 func (ui *CliUI) OnTimeout(msgID int64) {
-	fmt.Printf("\n[Timeout] msg_id=%d not delivered\n> ", msgID)
+	fmt.Printf(ColorRed+"\n[Timeout] msg_id=%d not delivered\n"+ColorReset, msgID)
+	ui.Prompt()
 }

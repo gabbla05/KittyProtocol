@@ -9,6 +9,7 @@ type UI interface {
 	ReadSharedSecret() []byte
 	Println(v ...any)
 	Printf(format string, v ...any)
+	Prompt()
 }
 
 type App struct {
@@ -91,25 +92,28 @@ func (a *App) handleChatEvents() {
 		select {
 		case ev := <-a.client.ChatRequestEvents():
 			a.chatState.SetPendingRequest(ev.From)
-			a.ui.Printf(
-				"\n[CHAT] %s chce z Tobą rozmawiać. Użyj /accept %s lub /refuse %s\n> ",
-				ev.From, ev.From, ev.From,
-			)
+			a.ui.Printf("\n[CHAT] %s chce z Tobą rozmawiać. Użyj /accept %s lub /refuse %s\n",
+				ev.From, ev.From, ev.From)
+			a.ui.Prompt()
 
 		case ev := <-a.client.ChatAcceptEvents():
 			a.chatState.SetActive(ev.From)
-			a.ui.Printf("\n[CHAT] %s zaakceptował czat.\n> ", ev.From)
+			a.ui.Printf("\n[CHAT] %s zaakceptował czat.\n", ev.From)
+			a.ui.Prompt()
 
 		case ev := <-a.client.ChatRefuseEvents():
 			a.chatState.ClearPendingRequest()
-			a.ui.Printf("\n[CHAT] %s odrzucił czat: %s\n> ", ev.From, ev.Reason)
+			a.ui.Printf("\n[CHAT] %s odrzucił czat: %s\n", ev.From, ev.Reason)
+			a.ui.Prompt()
 
 		case ev := <-a.client.ChatEndEvents():
 			a.chatState.EndChat()
-			a.ui.Printf("\n[CHAT] %s zakończył czat: %s\n> ", ev.From, ev.Reason)
+			a.ui.Printf("\n[CHAT] %s zakończył czat: %s\n", ev.From, ev.Reason)
+			a.ui.Prompt()
 
 		case ev := <-a.client.ChatMessageEvents():
-			a.ui.Printf("\n[%s] %s\n> ", ev.From, ev.Text)
+			a.ui.Printf("\n[%s] %s\n", ev.From, ev.Text)
+			a.ui.Prompt()
 		}
 	}
 }
