@@ -1,1 +1,10 @@
-../../build/ci/release.yml
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  release-core:
+    uses: ./.github/../ci/release.yml

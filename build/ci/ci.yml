@@ -1,10 +1,7 @@
-name: CI
+name: CI core
 
 on:
-  push:
-    branches: [ main, backend/app-chat-logic ]
-  pull_request:
-    branches: [ main, backend/app-chat-logic ]
+  workflow_call: {}
 
 jobs:
   lint:

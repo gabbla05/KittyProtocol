@@ -1,9 +1,7 @@
-name: Release
+name: Release core
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'
+  workflow_call: {}
 
 jobs:
   build-and-release:

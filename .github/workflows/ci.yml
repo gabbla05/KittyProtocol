@@ -1,1 +1,11 @@
-../../build/ci/ci.yml
+name: CI
+
+on:
+  push:
+    branches: [ main, backend/app-chat-logic ]
+  pull_request:
+    branches: [ main, backend/app-chat-logic ]
+
+jobs:
+  ci-core:
+    uses: ./.github/../ci/ci.yml
