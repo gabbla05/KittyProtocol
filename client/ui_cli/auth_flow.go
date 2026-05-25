@@ -3,15 +3,15 @@ package ui_cli
 import (
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/gabbla05/KittyProtocol/client/api"
 )
 
 var ErrQuitRequested = errors.New("quit requested")
 
-// RunAuthFlow handles /login and /register before entering main menu.
-// This is CLI-specific and will be replaced by GUI in the future.
-func (ui *CliUI) RunAuthFlow(client *api.KittyClient) error {
+// Async AUTH/REGISTER flow
+func (ui *CliUI) RunAuthFlowAsync(client *api.KittyClient) error {
 	for {
 		ui.Println("Wybierz opcję:")
 		ui.Println("  /login")
@@ -26,6 +26,9 @@ func (ui *CliUI) RunAuthFlow(client *api.KittyClient) error {
 			client.Close()
 			return ErrQuitRequested
 
+		// ----------------------------------------------------
+		// REGISTER (async)
+		// ----------------------------------------------------
 		case "/register":
 			user, pass := ui.ReadCredentials()
 
@@ -34,13 +37,22 @@ func (ui *CliUI) RunAuthFlow(client *api.KittyClient) error {
 				continue
 			}
 
-			if err := client.WaitForRegisterOK(); err != nil {
-				ui.Println("[Client] REGISTER failed:", err)
+			select {
+			case res := <-client.RegisterResult():
+				if !res.OK {
+					ui.Println("[Client] REGISTER failed:", res.Error())
+					continue
+				}
+				ui.Println("[Client] REGISTER OK — możesz się teraz zalogować.")
+
+			case <-time.After(5 * time.Second):
+				ui.Println("[Client] REGISTER timeout")
 				continue
 			}
 
-			ui.Println("[Client] REGISTER OK — możesz się teraz zalogować.")
-
+		// ----------------------------------------------------
+		// LOGIN (async)
+		// ----------------------------------------------------
 		case "/login":
 			user, pass := ui.ReadCredentials()
 
@@ -49,13 +61,19 @@ func (ui *CliUI) RunAuthFlow(client *api.KittyClient) error {
 				continue
 			}
 
-			if err := client.WaitForAuthOK(); err != nil {
-				ui.Println("[Client] AUTH failed:", err)
+			select {
+			case res := <-client.AuthResult():
+				if !res.OK {
+					ui.Println("[Client] AUTH failed:", res.Error())
+					continue
+				}
+				ui.Println("[Client] AUTH OK — zalogowano.")
+				return nil
+
+			case <-time.After(5 * time.Second):
+				ui.Println("[Client] AUTH timeout")
 				continue
 			}
-
-			ui.Println("[Client] AUTH OK — zalogowano.")
-			return nil
 
 		default:
 			ui.Println("Nieznana komenda.")

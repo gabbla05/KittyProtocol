@@ -2,58 +2,78 @@ package app
 
 import "sync"
 
-// ChatState holds the current chat state on the client side.
-// It is fully independent from the transport layer.
 type ChatState struct {
 	mu sync.Mutex
 
-	// Whether a chat session is currently active (after CHAT_ACCEPT).
-	Active bool
-
-	// Logical username of the current chat peer.
+	Active       bool
 	ActiveTarget string
 
-	// If someone sent us a CHAT_REQUEST, this stores the sender username.
-	PendingRequestFrom string
+	Pending     bool
+	PendingFrom string
 }
 
-// NewChatState creates an empty chat state.
 func NewChatState() *ChatState {
 	return &ChatState{}
 }
 
-// SetActive marks a chat as active with the given target.
-func (s *ChatState) SetActive(target string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.Active = true
-	s.ActiveTarget = target
-	s.PendingRequestFrom = ""
-}
-
-// SetPendingRequest records an incoming chat request.
+// Incoming CHAT_REQUEST
 func (s *ChatState) SetPendingRequest(from string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.PendingRequestFrom = from
+	s.Pending = true
+	s.PendingFrom = from
 }
 
-// ClearPendingRequest clears any pending chat request.
+// User accepted chat
+func (s *ChatState) SetActive(peer string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.Active = true
+	s.ActiveTarget = peer
+
+	s.Pending = false
+	s.PendingFrom = ""
+}
+
+// User refused chat
 func (s *ChatState) ClearPendingRequest() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.PendingRequestFrom = ""
+	s.Pending = false
+	s.PendingFrom = ""
 }
 
-// EndChat ends the current chat and clears state.
+// Chat ended
 func (s *ChatState) EndChat() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	s.Active = false
 	s.ActiveTarget = ""
-	s.PendingRequestFrom = ""
+
+	s.Pending = false
+	s.PendingFrom = ""
+}
+
+// --- bezpieczne gettery / checki ---
+
+func (s *ChatState) IsActive() (bool, string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.Active, s.ActiveTarget
+}
+
+func (s *ChatState) HasPendingFrom(user string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.Pending && s.PendingFrom == user
+}
+
+func (s *ChatState) HasAnyPending() (bool, string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.Pending, s.PendingFrom
 }

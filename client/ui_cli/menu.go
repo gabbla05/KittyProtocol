@@ -2,13 +2,14 @@ package ui_cli
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"strings"
 
+	"github.com/gabbla05/KittyProtocol/client/api"
 	"github.com/gabbla05/KittyProtocol/client/app"
 )
 
-// RunMainMenu displays the main command loop for CLI.
 func (ui *CliUI) RunMainMenu(a *app.App) {
 	for {
 		select {
@@ -26,12 +27,21 @@ func (ui *CliUI) RunMainMenu(a *app.App) {
 
 		switch {
 
-		// Exit
+		// ----------------------------------------------------
+		// QUIT
+		// ----------------------------------------------------
 		case line == "/quit":
+			if active, peer := a.ChatState().IsActive(); active && peer != "" {
+				if err := a.EndChat("user quit client"); err != nil {
+					ui.Println("[CHAT ERROR]", err)
+				}
+			}
 			_ = a.Client().SendBye()
 			return
 
-		// Presence status
+		// ----------------------------------------------------
+		// STATUS
+		// ----------------------------------------------------
 		case strings.HasPrefix(line, "/status "):
 			user := strings.TrimSpace(strings.TrimPrefix(line, "/status "))
 			user = strings.ToLower(user)
@@ -41,7 +51,9 @@ func (ui *CliUI) RunMainMenu(a *app.App) {
 			}
 			_ = a.Client().SendGetStatus(user)
 
-		// Configure shared secret for a peer (E2EE)
+		// ----------------------------------------------------
+		// SECRET (local only)
+		// ----------------------------------------------------
 		case strings.HasPrefix(line, "/secret "):
 			args := strings.Fields(line)
 			if len(args) < 2 {
@@ -75,7 +87,9 @@ func (ui *CliUI) RunMainMenu(a *app.App) {
 
 			ui.Printf("[E2EE] Shared secret configured for %s.\n", user)
 
-		// Start chat
+		// ----------------------------------------------------
+		// CHAT REQUEST (async)
+		// ----------------------------------------------------
 		case strings.HasPrefix(line, "/chat "):
 			user := strings.TrimSpace(strings.TrimPrefix(line, "/chat "))
 			user = strings.ToLower(user)
@@ -85,12 +99,19 @@ func (ui *CliUI) RunMainMenu(a *app.App) {
 			}
 
 			if err := a.StartChatRequest(user); err != nil {
-				ui.Println("Błąd:", err)
+				// Ładny komunikat dla braku sekretu
+				if errors.Is(err, api.ErrNoSharedSecret) || strings.Contains(err.Error(), "no shared secret") {
+					ui.Printf("[CHAT] Brak wspólnego sekretu z %s. Użyj /secret %s.\n", user, user)
+				} else {
+					ui.Println("[CHAT ERROR]", err)
+				}
 			} else {
 				ui.Printf("[CHAT] Wysłano CHAT_REQUEST do %s.\n", user)
 			}
 
-		// Accept chat request
+		// ----------------------------------------------------
+		// ACCEPT CHAT
+		// ----------------------------------------------------
 		case strings.HasPrefix(line, "/accept "):
 			user := strings.TrimSpace(strings.TrimPrefix(line, "/accept "))
 			user = strings.ToLower(user)
@@ -100,12 +121,12 @@ func (ui *CliUI) RunMainMenu(a *app.App) {
 			}
 
 			if err := a.AcceptChat(user); err != nil {
-				ui.Println("Błąd:", err)
-			} else {
-				ui.Printf("[CHAT] Zaakceptowano czat z %s.\n", user)
+				ui.Println("[CHAT ERROR]", err)
 			}
 
-		// Refuse chat request
+		// ----------------------------------------------------
+		// REFUSE CHAT
+		// ----------------------------------------------------
 		case strings.HasPrefix(line, "/refuse "):
 			user := strings.TrimSpace(strings.TrimPrefix(line, "/refuse "))
 			user = strings.ToLower(user)
@@ -115,12 +136,12 @@ func (ui *CliUI) RunMainMenu(a *app.App) {
 			}
 
 			if err := a.RefuseChat(user, "user refused"); err != nil {
-				ui.Println("Błąd:", err)
-			} else {
-				ui.Printf("[CHAT] Odrzucono czat z %s.\n", user)
+				ui.Println("[CHAT ERROR]", err)
 			}
 
-		// Send message in active chat
+		// ----------------------------------------------------
+		// SEND MESSAGE
+		// ----------------------------------------------------
 		case strings.HasPrefix(line, "/msg "):
 			text := strings.TrimSpace(strings.TrimPrefix(line, "/msg "))
 			if text == "" {
@@ -128,15 +149,15 @@ func (ui *CliUI) RunMainMenu(a *app.App) {
 			}
 
 			if err := a.SendTextMessage(text); err != nil {
-				ui.Println("Błąd:", err)
+				ui.Println("[CHAT ERROR]", err)
 			}
 
-		// End chat
+		// ----------------------------------------------------
+		// END CHAT
+		// ----------------------------------------------------
 		case line == "/end":
 			if err := a.EndChat("user ended chat"); err != nil {
-				ui.Println("Błąd:", err)
-			} else {
-				ui.Println("[CHAT] Zakończono czat.")
+				ui.Println("[CHAT ERROR]", err)
 			}
 
 		default:
@@ -148,7 +169,7 @@ func (ui *CliUI) RunMainMenu(a *app.App) {
 func (ui *CliUI) printMenu() {
 	ui.Println("Dostępne komendy:")
 	ui.Println("  /status <user>")
-	ui.Println("  /secret <user>   # configure shared secret for peer")
+	ui.Println("  /secret <user>")
 	ui.Println("  /chat <user>")
 	ui.Println("  /accept <user>")
 	ui.Println("  /refuse <user>")

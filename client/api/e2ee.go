@@ -38,3 +38,14 @@ func (c *KittyClient) SetSharedSecretForPeer(peer string, secret []byte) error {
 	}
 	return nil
 }
+
+func (c *KittyClient) HasSharedSecret(peer string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.peerKeys == nil {
+		return false
+	}
+	_, ok := c.peerKeys[peer]
+	return ok
+}

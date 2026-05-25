@@ -44,3 +44,7 @@ UZUPEŁNIĆ DOKUMENTACJE W GITHUB O MEOWSSENGER I W README DAĆ ŻE EOWSSENGER P
 - godoc !!! Sporawdzić czy zadziała u nas
 
 - CI/CD
+- jeszcze w logice klienta -> jak robi quit to robi też /end a nie zostawia czatu tak o bo wtedy błędy się robią
+- gwiazdki w cli jak się hasło wpisuje albo nie pokazywać jak się wpisuje w ogóle bo obecnie się wyświetla w konsoli normalnie
+- czy komendy typu /fdfsdfdsf nie powinny byćogólnie dostępne, także w gui na przyszłość, żeby gui wołało tylko jakąś komendę np. /status albo /chat <user> itp
+- na język polski zmiana

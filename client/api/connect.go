@@ -13,7 +13,7 @@ import (
 // BEHAVIOR:
 //   - If the client was previously connected, Connect() implicitly closes the old connection.
 //   - Performs TLS 1.3 setup, QUIC dial, TOFU certificate verification, and stream opening.
-//   - Sends the HELLO frame immediately after the stream is opened.
+//   - Sends the HELLO frame immediately after the stream is opened (non‑blocking).
 //   - Does NOT start receiver or ping loops — the caller must start them manually.
 //
 // STATE TRANSITIONS:
@@ -28,8 +28,6 @@ func (c *KittyClient) Connect(hubAddr string) error {
 	c.Close()
 
 	// Recreate control channels for background loops.
-	// Close() closes stopPing/stopRecv; they must be reinitialized
-	// before starting new receiver/ping goroutines.
 	c.mu.Lock()
 	c.stopPing = make(chan struct{})
 	c.stopRecv = make(chan struct{})
@@ -76,7 +74,7 @@ func (c *KittyClient) Connect(hubAddr string) error {
 	c.ackMgr = NewAckManager()
 	c.mu.Unlock()
 
-	// Send HELLO immediately
+	// Send HELLO immediately (async handshake)
 	if err := c.SendHello(); err != nil {
 		return err
 	}
@@ -86,17 +84,6 @@ func (c *KittyClient) Connect(hubAddr string) error {
 }
 
 // Disconnect closes the QUIC connection and stream.
-// This is a convenience wrapper around KittyClient.Close().
 func (c *KittyClient) Disconnect() {
 	c.Close()
-}
-
-// WaitForHelloOK waits for MEOW_OK after HELLO and transitions to StateAuthenticating.
-func (c *KittyClient) WaitForHelloOK() error {
-	ok, code := c.waitHelloOK()
-	if ok {
-		c.setState(StateAuthenticating)
-		return nil
-	}
-	return errors.New(code)
 }

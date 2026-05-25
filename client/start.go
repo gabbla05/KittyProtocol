@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/gabbla05/KittyProtocol/client/api"
 	"github.com/gabbla05/KittyProtocol/client/app"
@@ -14,7 +15,7 @@ func Start() {
 	client := api.NewKittyClient()
 	ui := ui_cli.NewCliUI(client)
 
-	// Ustaw logger CLI
+	// Logger CLI
 	api.SetLogger(ui_cli.CliLogger{})
 
 	disconnected := make(chan struct{})
@@ -26,24 +27,44 @@ func Start() {
 
 	ui.Println("[Client] Connecting to Hub:", hubAddr)
 
+	// CONNECT
 	if err := client.Connect(hubAddr); err != nil {
 		ui.Println("[Client] Connection error:", err)
 		return
 	}
 
-	if err := client.WaitForHelloOK(); err != nil {
-		ui.Println("[Client] HELLO failed:", err)
+	// ----------------------------------------------------
+	// START RECEIVER LOOP BEFORE WAITING FOR HELLO
+	// ----------------------------------------------------
+	client.StartReceiverLoop(disconnected)
+
+	// ----------------------------------------------------
+	// ASYNC HELLO
+	// ----------------------------------------------------
+	select {
+	case res := <-client.HelloResult():
+		if !res.OK {
+			ui.Println("[Client] HELLO failed:", res.Error())
+			client.Close()
+			return
+		}
+	case <-time.After(5 * time.Second):
+		ui.Println("[Client] HELLO timeout")
 		client.Close()
 		return
 	}
 
-	// AUTH FLOW
-	if err := ui.RunAuthFlow(client); err == ui_cli.ErrQuitRequested {
+	// ----------------------------------------------------
+	// AUTH FLOW (CLI-specific)
+	// ----------------------------------------------------
+	if err := ui.RunAuthFlowAsync(client); err == ui_cli.ErrQuitRequested {
 		client.Close()
 		return
 	}
 
-	// AUTH SUCCESS
+	// ----------------------------------------------------
+	// AUTH SUCCESS → start application
+	// ----------------------------------------------------
 	application := app.NewApp(client, ui, disconnected)
 	application.InitSecretStoreForUser(client.User())
 
@@ -51,7 +72,7 @@ func Start() {
 
 	setupSignalHandler(client)
 
-	client.StartReceiverLoop(disconnected)
+	// Ping loop dopiero po AUTH
 	client.StartPingLoop()
 
 	ui.RunMainMenu(application)
