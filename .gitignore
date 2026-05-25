@@ -3,3 +3,8 @@
 .env
 
 .structure.txt
+
+bin/
+
+cover.out
+coverage.out
