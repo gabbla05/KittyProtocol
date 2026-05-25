@@ -15,7 +15,7 @@
  * **`Odporność na ataki`**: Natywne wsparcie dla TLS 1.3 oraz mechanizmy zapobiegające atakom typu Man-in-the-Middle (MitM) i Replay.
 
  ### Dokumentacja:
- Szczegółowa dokumentacja protokołu znajduje się w dokumencie: [KittyProtocol.pdf](documentation/KittyProtocol.pdf)
+ Szczegółowa dokumentacja protokołu znajduje się w dokumencie: [KittyProtocol.pdf](docs/KittyProtocol.pdf)
 
  ---
  Authors: 

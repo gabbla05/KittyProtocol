@@ -16,7 +16,7 @@
  * **`Attack Resistance`**: Native support for TLS 1.3 and mechanisms preventing Man‑in‑the‑Middle (MitM) and Replay attacks.
 
  ### Documentation:
- Full protocol documentation is available here: [KittyProtocol.pdf](documentation/KittyProtocol-EN.pdf)
+ Full protocol documentation is available here: [KittyProtocol.pdf](docs/KittyProtocol-EN.pdf)
 
  ---
  Authors: 
