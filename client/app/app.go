@@ -68,9 +68,9 @@ func (a *App) attachEventHandlers() {
 	})
 }
 
-func (a *App) InitSecretStoreForUser(username string) {
+func (a *App) InitSecretStoreForUser(username string, masterKey []byte) {
 	path := PathForUser(username)
-	a.secrets = NewSecretStore(path)
+	a.secrets = NewSecretStore(path, masterKey)
 
 	for peer, secret := range a.secrets.All() {
 		_ = a.client.SetSharedSecretForPeer(peer, secret)

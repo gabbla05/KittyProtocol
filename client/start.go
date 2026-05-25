@@ -57,7 +57,13 @@ func Start() {
 	// ----------------------------------------------------
 	// AUTH FLOW (CLI-specific)
 	// ----------------------------------------------------
-	if err := ui.RunAuthFlowAsync(client); err == ui_cli.ErrQuitRequested {
+	pass, err := ui.RunAuthFlowAsync(client)
+	if err == ui_cli.ErrQuitRequested {
+		client.Close()
+		return
+	}
+	if err != nil {
+		ui.Println("[Client] AUTH error:", err)
 		client.Close()
 		return
 	}
@@ -66,7 +72,9 @@ func Start() {
 	// AUTH SUCCESS → start application
 	// ----------------------------------------------------
 	application := app.NewApp(client, ui, disconnected)
-	application.InitSecretStoreForUser(client.User())
+
+	// ⬇️ NOWOŚĆ: przekazujemy masterKey = hasło użytkownika
+	application.InitSecretStoreForUser(client.User(), []byte(pass))
 
 	client.RegisterAckHandler(ui)
 

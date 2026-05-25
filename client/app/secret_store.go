@@ -1,44 +1,130 @@
 package app
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
 )
 
 // SecretStore manages per-peer shared secrets persisted on disk.
-// Each Kitty user has its own directory: ~/.kitty/<kittyUser>/secrets.json
+// Each Kitty user has its own directory: ~/.kitty/<kittyUser>/secrets.json.enc
+//
+// Plik na dysku jest CAŁY zaszyfrowany AES-GCM kluczem wyprowadzonym
+// z masterKey (np. hasła użytkownika).
 type SecretStore struct {
-	mu      sync.Mutex
-	path    string
-	secrets map[string][]byte
+	mu        sync.Mutex
+	path      string
+	masterKey []byte
+	secrets   map[string][]byte
 }
 
 type diskSecrets struct {
 	Peers map[string]string `json:"peers"` // peer -> base64(secret)
 }
 
+// deriveKey normalizuje masterKey do 32 bajtów (AES-256) przez SHA-256.
+// Jeśli masterKey jest hasłem, to jest to prosty KDF.
+// W przyszłości można to podmienić na PBKDF2/Argon2.
+func deriveKey(masterKey []byte) []byte {
+	sum := sha256.Sum256(masterKey)
+	return sum[:]
+}
+
+// encrypt encryptuje plaintext przy użyciu AES-GCM(masterKey).
+// Zwraca: base64( nonce || ciphertext ).
+func encrypt(masterKey, plaintext []byte) (string, error) {
+	if len(masterKey) == 0 {
+		return "", errors.New("master key is empty")
+	}
+
+	key := deriveKey(masterKey)
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", err
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", err
+	}
+
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return "", err
+	}
+
+	ciphertext := gcm.Seal(nil, nonce, plaintext, nil)
+
+	out := append(nonce, ciphertext...)
+	return base64.StdEncoding.EncodeToString(out), nil
+}
+
+// decrypt odszyfrowuje base64( nonce || ciphertext ) przy użyciu AES-GCM(masterKey).
+func decrypt(masterKey []byte, enc string) ([]byte, error) {
+	if len(masterKey) == 0 {
+		return nil, errors.New("master key is empty")
+	}
+
+	raw, err := base64.StdEncoding.DecodeString(enc)
+	if err != nil {
+		return nil, err
+	}
+
+	key := deriveKey(masterKey)
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(raw) < gcm.NonceSize() {
+		return nil, errors.New("ciphertext too short")
+	}
+
+	nonce := raw[:gcm.NonceSize()]
+	ciphertext := raw[gcm.NonceSize():]
+
+	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		return nil, err
+	}
+	return plaintext, nil
+}
+
 // NewSecretStore creates a SecretStore bound to the given file path.
-// If the file exists, it is loaded; otherwise an empty store is created.
-func NewSecretStore(path string) *SecretStore {
+// masterKey musi być stały dla danego użytkownika (np. hasło logowania).
+// Jeśli plik istnieje, jest odszyfrowywany; w przeciwnym razie tworzony jest pusty store.
+func NewSecretStore(path string, masterKey []byte) *SecretStore {
 	s := &SecretStore{
-		path:    path,
-		secrets: make(map[string][]byte),
+		path:      path,
+		masterKey: append([]byte(nil), masterKey...),
+		secrets:   make(map[string][]byte),
 	}
 	_ = s.load()
 	return s
 }
 
-// PathForUser returns ~/.kitty/<kittyUser>/secrets.json
+// PathForUser returns ~/.kitty/<kittyUser>/secrets.json.enc
 func PathForUser(kittyUser string) string {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
-		return filepath.Join(".", "kitty", kittyUser, "secrets.json")
+		return filepath.Join(".", "kitty", kittyUser, "secrets.json.enc")
 	}
-	return filepath.Join(home, ".kitty", kittyUser, "secrets.json")
+	return filepath.Join(home, ".kitty", kittyUser, "secrets.json.enc")
 }
 
 func (s *SecretStore) Get(peer string) ([]byte, bool) {
@@ -84,8 +170,14 @@ func (s *SecretStore) load() error {
 		return err
 	}
 
+	// odszyfruj cały plik
+	plaintext, err := decrypt(s.masterKey, string(data))
+	if err != nil {
+		return err
+	}
+
 	var ds diskSecrets
-	if err := json.Unmarshal(data, &ds); err != nil {
+	if err := json.Unmarshal(plaintext, &ds); err != nil {
 		return err
 	}
 
@@ -115,13 +207,18 @@ func (s *SecretStore) saveLocked() error {
 		ds.Peers[peer] = base64.StdEncoding.EncodeToString(secret)
 	}
 
-	data, err := json.MarshalIndent(ds, "", "  ")
+	plaintext, err := json.MarshalIndent(ds, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	enc, err := encrypt(s.masterKey, plaintext)
 	if err != nil {
 		return err
 	}
 
 	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+	if err := os.WriteFile(tmp, []byte(enc), 0o600); err != nil {
 		return err
 	}
 

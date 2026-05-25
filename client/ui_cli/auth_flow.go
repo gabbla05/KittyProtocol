@@ -11,7 +11,7 @@ import (
 var ErrQuitRequested = errors.New("quit requested")
 
 // Async AUTH/REGISTER flow
-func (ui *CliUI) RunAuthFlowAsync(client *api.KittyClient) error {
+func (ui *CliUI) RunAuthFlowAsync(client *api.KittyClient) (string, error) {
 	for {
 		ui.Println("Wybierz opcję:")
 		ui.Println("  /login")
@@ -24,7 +24,7 @@ func (ui *CliUI) RunAuthFlowAsync(client *api.KittyClient) error {
 
 		case "/quit":
 			client.Close()
-			return ErrQuitRequested
+			return "", ErrQuitRequested
 
 		// ----------------------------------------------------
 		// REGISTER (async)
@@ -68,7 +68,7 @@ func (ui *CliUI) RunAuthFlowAsync(client *api.KittyClient) error {
 					continue
 				}
 				ui.Println("[Client] AUTH OK — zalogowano.")
-				return nil
+				return pass, nil
 
 			case <-time.After(5 * time.Second):
 				ui.Println("[Client] AUTH timeout")
