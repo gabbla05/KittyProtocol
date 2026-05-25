@@ -8,7 +8,9 @@ package hub
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"os"
+	"strings"
 
 	"github.com/gabbla05/KittyProtocol/internal/auth"
 	"github.com/gabbla05/KittyProtocol/internal/certmanager"
@@ -77,12 +79,23 @@ func Start() {
 	logInfo("🐈 KittyProtocol Hub listening on %s", addr)
 
 	// Handle SIGINT/SIGTERM for graceful shutdown.
-	setupSignalHandler(listener)
+	ctx := setupSignalHandler(listener)
 
 	// Accept incoming QUIC connections.
 	for {
-		conn, err := listener.Accept(context.Background())
+		conn, err := listener.Accept(ctx)
 		if err != nil {
+
+			// --- NORMAL SERVER SHUTDOWN ---
+			// When listener.Close() is called, Accept() MUST return an error.
+			// This is not a failure — it's how QUIC-go signals shutdown.
+			if errors.Is(err, context.Canceled) ||
+				strings.Contains(err.Error(), "server closed") {
+				logInfo("Accept loop stopped gracefully: %v", err)
+				return
+			}
+
+			// --- REAL ERROR ---
 			logError("Accept error: %v", err)
 			return
 		}

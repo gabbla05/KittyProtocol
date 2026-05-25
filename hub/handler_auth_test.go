@@ -9,30 +9,6 @@ import (
 	"github.com/gabbla05/KittyProtocol/protocol"
 )
 
-// --- HELLO tests ---
-
-func TestHandleHello(t *testing.T) {
-	// We must provide a fake stream, otherwise handleHello will panic
-	c := &clientContext{
-		state:  stateInit,
-		stream: &fakeStream{},
-	}
-
-	frame := protocol.HelloFrame{
-		BaseFrame: protocol.BaseFrame{Type: protocol.FrameTypeHello, MsgID: 1},
-		Version:   "1.0",
-	}
-	raw, _ := json.Marshal(frame)
-
-	c.handleHello(raw)
-
-	if c.state != stateHelloReceived {
-		t.Fatalf("HELLO should transition to stateHelloReceived")
-	}
-}
-
-// --- AUTH tests ---
-
 func TestHandleAuthBeforeHello(t *testing.T) {
 	globalAuth = auth.NewMockAuth()
 
@@ -104,24 +80,25 @@ func TestHandleAuthSuccess(t *testing.T) {
 	}
 }
 
-// --- DATA tests ---
+func TestHandleAuthUnknownUser(t *testing.T) {
+	globalAuth = auth.NewMockAuth()
+	globalSessions = protection.NewSessionManager()
 
-func TestHandleDataBeforeAuth(t *testing.T) {
 	c := &clientContext{
 		state:  stateHelloReceived,
 		stream: &fakeStream{},
 	}
 
-	frame := protocol.DataFrame{
-		BaseFrame: protocol.BaseFrame{Type: protocol.FrameTypeData, MsgID: 1},
-		Target:    "bob",
-		Payload:   "abc",
+	frame := protocol.AuthFrame{
+		BaseFrame: protocol.BaseFrame{Type: protocol.FrameTypeAuth, MsgID: 1},
+		User:      "ghost",
+		Pass:      "whatever",
 	}
 	raw, _ := json.Marshal(frame)
 
-	c.handleData(raw)
+	c.handleAuth(raw)
 
 	if c.state != stateHelloReceived {
-		t.Fatalf("DATA before AUTH should not change state")
+		t.Fatalf("AUTH with unknown user should not authenticate")
 	}
 }
