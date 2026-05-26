@@ -13,10 +13,14 @@ var ErrQuitRequested = errors.New("quit requested")
 // Async AUTH/REGISTER flow
 func (ui *CliUI) RunAuthFlowAsync(client *api.KittyClient) (string, error) {
 	for {
-		ui.Println("Wybierz opcję:")
-		ui.Println("  /login")
-		ui.Println("  /register")
-		ui.Println("  /quit")
+		ui.Println(ColorBlue + "\n  ==================" + ColorReset)
+		ui.Println(ColorBlue + " | Wybierz opcję:   |")
+		ui.Println(" |                  |")
+		ui.Println(" | " + ColorGreen + "->" + ColorReset + "   /login      " + ColorBlue + "|")
+		ui.Println(" | " + ColorGreen + "->" + ColorReset + "   /register   " + ColorBlue + "|")
+		ui.Println(" | " + ColorGreen + "->" + ColorReset + "   /quit       " + ColorBlue + "|")
+		ui.Println("  ==================\n" + ColorReset)
+		ui.Prompt()
 
 		cmd := strings.TrimSpace(ui.ReadLine())
 

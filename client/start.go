@@ -25,7 +25,8 @@ func Start() {
 		hubAddr = "127.0.0.1:9999"
 	}
 
-	ui.Println("[Client] Connecting to Hub:", hubAddr)
+	ui_cli.PrintBanner()
+	ui.Println("\n[Client] Connecting to Hub:", hubAddr)
 
 	// CONNECT
 	if err := client.Connect(hubAddr); err != nil {

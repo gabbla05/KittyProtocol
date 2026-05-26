@@ -30,11 +30,11 @@ func (ui *CliUI) RunMainMenu(a *app.App) {
 		switch {
 
 		// ----------------------------------------------------
-		// QUIT
+		// LOGOUT
 		// ----------------------------------------------------
-		case line == "/quit":
+		case line == "/logout":
 			if active, peer := a.ChatState().IsActive(); active && peer != "" {
-				if err := a.EndChat("user quit client"); err != nil {
+				if err := a.EndChat("user logout client"); err != nil {
 					ui.Println(ColorRed+"[CHAT ERROR]"+ColorReset, err)
 				}
 			}
@@ -168,13 +168,15 @@ func (ui *CliUI) RunMainMenu(a *app.App) {
 }
 
 func (ui *CliUI) printMenu() {
-	ui.Println(ColorGreen + "Dostępne komendy:" + ColorReset)
-	ui.Println("  /status <user>")
-	ui.Println("  /secret <user>")
-	ui.Println("  /chat <user>")
-	ui.Println("  /accept <user>")
-	ui.Println("  /refuse <user>")
-	ui.Println("  /msg <tekst>")
-	ui.Println("  /end")
-	ui.Println("  /quit")
+	ui.Println(ColorBlue + "\n  ======================" + ColorReset)
+	ui.Println(ColorBlue + " | " + ColorGreen + "Dostępne komendy:    " + ColorBlue + "|")
+	ui.Println(" | " + ColorGreen + "->" + ColorReset + " /status <user>    " + ColorBlue + "|")
+	ui.Println(" | " + ColorGreen + "->" + ColorReset + " /secret <user>    " + ColorBlue + "|")
+	ui.Println(" | " + ColorGreen + "->" + ColorReset + " /chat <user>      " + ColorBlue + "|")
+	ui.Println(" | " + ColorGreen + "->" + ColorReset + " /accept <user>    " + ColorBlue + "|")
+	ui.Println(" | " + ColorGreen + "->" + ColorReset + " /refuse <user>    " + ColorBlue + "|")
+	ui.Println(" | " + ColorGreen + "->" + ColorReset + " /msg <tekst>      " + ColorBlue + "|")
+	ui.Println(" | " + ColorGreen + "->" + ColorReset + " /end              " + ColorBlue + "|")
+	ui.Println(" | " + ColorGreen + "->" + ColorReset + " /logout           " + ColorBlue + "|")
+	ui.Println(ColorBlue + "  ======================\n" + ColorReset)
 }

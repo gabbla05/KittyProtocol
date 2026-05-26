@@ -11,6 +11,8 @@ import (
 	"os"
 	"strings"
 
+	"golang.org/x/term"
+
 	"github.com/gabbla05/KittyProtocol/client/api"
 )
 
@@ -18,8 +20,8 @@ const (
 	ColorReset  = "\033[0m"
 	ColorRed    = "\033[31m"
 	ColorGreen  = "\033[32m"
-	ColorBlue   = "\033[36m"
-	ColorPink   = "\033[95m"
+	ColorBlue   = "\033[34m"
+	ColorPink   = "\x1b[38;5;213m"
 	ColorYellow = "\033[33m"
 
 	Prompt = ColorPink + "(=^._.^=) > " + ColorReset
@@ -70,19 +72,23 @@ func (ui *CliUI) Printf(format string, v ...any) {
 
 // ReadCredentials prompts the user for login and password.
 func (ui *CliUI) ReadCredentials() (string, string) {
-	fmt.Print(ColorBlue + "Login: " + ColorReset)
+	fmt.Print(ColorBlue + " -> Login: " + ColorReset)
 	user, _ := ui.reader.ReadString('\n')
+	user = strings.TrimSpace(user)
 
-	fmt.Print(ColorBlue + "Hasło: " + ColorReset)
-	pass, _ := ui.reader.ReadString('\n')
+	fmt.Print(ColorBlue + " -> Hasło: " + ColorReset)
+	// czytamy hasło bez echa
+	bytePass, _ := term.ReadPassword(int(os.Stdin.Fd()))
+	fmt.Println() // nowa linia po wpisaniu hasła
+	pass := strings.TrimSpace(string(bytePass))
 
-	return strings.TrimSpace(user), strings.TrimSpace(pass)
+	return user, pass
 }
 
 // ReadSharedSecret prompts the user for the E2EE shared secret.
 func (ui *CliUI) ReadSharedSecret() []byte {
 	for {
-		fmt.Print(ColorYellow + "Wspólny sekret (K_AB): " + ColorReset)
+		fmt.Print(ColorYellow + " -> Wspólny sekret (K_AB): " + ColorReset)
 		secret, _ := ui.reader.ReadString('\n')
 		secret = strings.TrimSpace(secret)
 

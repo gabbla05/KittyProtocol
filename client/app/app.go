@@ -45,11 +45,13 @@ func (a *App) attachEventHandlers() {
 		if code == "ERR_15" {
 			if active, _ := a.chatState.IsActive(); active {
 				a.chatState.EndChat()
-				a.ui.Printf("\n[CHAT] Czat zakończony (peer unavailable: %s).\n> ", desc)
+				a.ui.Printf("\n[CHAT] Czat zakończony (peer unavailable: %s).\n", desc)
+				a.ui.Prompt()
 				return
 			}
 		}
-		a.ui.Printf("\n[ERROR] %s: %s\n> ", code, desc)
+		a.ui.Printf("\n[ERROR] %s: %s\n", code, desc)
+		a.ui.Prompt()
 	})
 
 	// STATUS_RES frame
@@ -58,14 +60,16 @@ func (a *App) attachEventHandlers() {
 			a.ui.Printf("\n[CHAT] Czat zakończony.\n> ")
 			return
 		}
-		a.ui.Printf("\n[STATUS] %s is %s\n> ", target, status)
+		a.ui.Printf("\n[STATUS] %s is %s\n", target, status)
+		a.ui.Prompt()
 	})
 
 	// Disconnect event
 	c.OnDisconnected(func(err error) {
 		// Przy rozłączeniu zawsze czyścimy stan czatu lokalnie.
 		a.chatState.EndChat()
-		a.ui.Printf("\n[DISCONNECTED] %v\n> ", err)
+		a.ui.Printf("\n[DISCONNECTED] %v\n", err)
+		a.ui.Prompt()
 	})
 }
 
@@ -82,7 +86,7 @@ func (a *App) Client() *api.KittyClient      { return a.client }
 func (a *App) Secrets() *SecretStore         { return a.secrets }
 func (a *App) Disconnected() <-chan struct{} { return a.disconnected }
 
-// Udostępniamy ChatState dla UI (np. do obsługi /quit).
+// Udostępniamy ChatState dla UI (np. do obsługi /logout).
 func (a *App) ChatState() *ChatState {
 	return a.chatState
 }
