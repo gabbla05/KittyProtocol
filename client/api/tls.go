@@ -10,29 +10,28 @@ import (
 	"time"
 )
 
-// buildTLSConfig returns a hardened TLS 1.3 configuration.
+// buildTLSConfig returns a hardened TLS 1.3 configuration for KittyClient.
 //
 // SECURITY MODEL
-//   - TLS 1.3 only
-//   - QUIC-specific ALPN enforced
-//   - TOFU certificate validation
-//   - Session resumption disabled
-//   - Strong curves only
-//   - Strong TLS 1.3 cipher suites only
+//   - TLS 1.3 only.
+//   - QUIC-specific ALPN enforced.
+//   - TOFU (Trust On First Use) certificate validation.
+//   - Session resumption disabled.
+//   - Strong curves only.
+//   - Strong TLS 1.3 cipher suites only.
 //
 // CERTIFICATE VALIDATION
-// Default PKI verification is intentionally disabled because
-// the application uses TOFU (Trust On First Use).
-//
-// The first successfully seen certificate is stored locally.
-// Future connections must present the same certificate.
+//   - Standard PKI verification (CA/hostname) is intentionally disabled.
+//   - The application uses TOFU instead: the first successfully seen certificate
+//     is stored locally and pinned; future connections must present the same
+//     certificate or the connection is rejected.
 func buildTLSConfig() *tls.Config {
 	return &tls.Config{
-		// TLS 1.3 only
+		// TLS 1.3 only.
 		MinVersion: tls.VersionTLS13,
 		MaxVersion: tls.VersionTLS13,
 
-		// QUIC ALPN
+		// QUIC ALPN.
 		NextProtos: []string{
 			"kitty-quic-v1",
 		},
@@ -42,16 +41,16 @@ func buildTLSConfig() *tls.Config {
 		SessionTicketsDisabled: true,
 
 		// Explicitly disable renegotiation.
-		// (TLS 1.3 already removed it.)
+		// (TLS 1.3 already removed it, but we keep this explicit.)
 		Renegotiation: tls.RenegotiateNever,
 
-		// Strong ECDHE curves only
+		// Strong ECDHE curves only.
 		CurvePreferences: []tls.CurveID{
 			tls.X25519,
 			tls.CurveP256,
 		},
 
-		// Explicit TLS 1.3 cipher selection
+		// Explicit TLS 1.3 cipher selection.
 		CipherSuites: []uint16{
 			tls.TLS_AES_128_GCM_SHA256,
 			tls.TLS_AES_256_GCM_SHA384,
@@ -59,7 +58,7 @@ func buildTLSConfig() *tls.Config {
 		},
 
 		// Disable standard PKI verification.
-		// We validate manually via TOFU.
+		// We validate manually via TOFU in VerifyConnection.
 		InsecureSkipVerify: true,
 
 		// Modern verification hook.
@@ -84,8 +83,9 @@ func buildTLSConfig() *tls.Config {
 // validateServerCertificate performs minimal cryptographic sanity checks.
 //
 // NOTE:
-// This does NOT perform CA/hostname validation.
-// TOFU replaces the traditional PKI trust model.
+//   - This does NOT perform CA/hostname validation.
+//   - TOFU replaces the traditional PKI trust model.
+//   - The goal here is to reject obviously invalid or expired certificates.
 func validateServerCertificate(cert *x509.Certificate) error {
 	if err := cert.CheckSignatureFrom(cert); err != nil {
 		return errors.New("invalid self-signed certificate")

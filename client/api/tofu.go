@@ -29,6 +29,11 @@ const (
 //   - If no pinned certificate exists → store the presented certificate.
 //   - If a pinned certificate exists → compare DER bytes.
 //   - Any mismatch results in an error (possible MITM).
+//
+// SECURITY NOTES:
+//   - The very first connection is implicitly trusted (TOFU).
+//   - Subsequent connections are protected against MITM as long as the
+//     pinned certificate file remains uncompromised.
 func verifyOrStoreServerCert(cert *x509.Certificate) error {
 	if cert == nil {
 		return errors.New("no server certificate presented")
