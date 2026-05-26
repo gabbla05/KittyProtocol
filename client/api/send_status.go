@@ -17,6 +17,10 @@ func (c *KittyClient) SendGetStatus(target string) error {
 		return ErrTargetNotSet
 	}
 
+	if len(target) > maxUsernameLength {
+		return ErrTargetNameTooLong
+	}
+
 	msgID := time.Now().UnixMilli()
 
 	frame := protocol.GetStatusFrame{

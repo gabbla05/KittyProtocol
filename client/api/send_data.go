@@ -24,6 +24,10 @@ func (c *KittyClient) SendAppFrameEncrypted(target string, payload []byte) error
 		return ErrTargetNotSet
 	}
 
+	if len(target) > maxUsernameLength {
+		return ErrTargetNameTooLong
+	}
+
 	c.mu.Lock()
 	kEnc, kMac, ok := c.getKeysForPeer(target)
 	ackMgr := c.ackMgr
@@ -40,6 +44,10 @@ func (c *KittyClient) SendAppFrameEncrypted(target string, payload []byte) error
 	}
 
 	canonTarget := canonicalTarget(target)
+
+	if len(payload) > maxPayloadSize {
+		return ErrPayloadTooLarge
+	}
 
 	payloadB64, macB64, err := cryptoee.EncryptAndMACWithKeys(
 		msgID,

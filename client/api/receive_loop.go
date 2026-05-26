@@ -40,7 +40,7 @@ func (c *KittyClient) StartReceiverLoop(disconnected chan struct{}) {
 
 			typeName, msgID, err := protocol.GetFrameType(frameBytes)
 			if err != nil {
-				c.handleParseError(err)
+				c.handleParseError(ErrFrameParseFailed)
 				continue
 			}
 
@@ -61,6 +61,9 @@ func (c *KittyClient) StartReceiverLoop(disconnected chan struct{}) {
 
 			case protocol.FrameTypeStatusRes:
 				c.handleStatusResFrame(frameBytes)
+
+			default:
+				c.handleParseError(ErrUnknownFrameType)
 			}
 		}
 	}()

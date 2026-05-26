@@ -1,8 +1,6 @@
 package api
 
 import (
-	"errors"
-
 	"github.com/gabbla05/KittyProtocol/internal/cryptoee"
 )
 
@@ -13,12 +11,19 @@ import (
 //   - Keys are derived using HKDF-SHA256 in internal/cryptoee.
 //   - Keys are zeroized and cleared in KittyClient.Close().
 //   - Keys are kept only in memory and never written to disk.
+//   - A minimum secret length is enforced to avoid weak E2EE setups.
 func (c *KittyClient) SetSharedSecretForPeer(peer string, secret []byte) error {
 	if peer == "" {
-		return errors.New("peer cannot be empty")
+		return ErrEmptyPeer
+	}
+	if len(peer) > maxUsernameLength {
+		return ErrPeerNameTooLong
 	}
 	if len(secret) == 0 {
-		return errors.New("secret cannot be empty")
+		return ErrEmptySecret
+	}
+	if len(secret) < minSharedSecretLength {
+		return ErrSharedSecretTooShort
 	}
 
 	kEnc, kMac, err := cryptoee.DeriveKeysFromSecret(secret)
@@ -32,13 +37,16 @@ func (c *KittyClient) SetSharedSecretForPeer(peer string, secret []byte) error {
 	if c.peerKeys == nil {
 		c.peerKeys = make(map[string]peerKeys)
 	}
+
 	c.peerKeys[peer] = peerKeys{
 		kEnc: kEnc,
 		kMac: kMac,
 	}
+
 	return nil
 }
 
+// HasSharedSecret returns true if E2EE keys exist for the given peer.
 func (c *KittyClient) HasSharedSecret(peer string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()

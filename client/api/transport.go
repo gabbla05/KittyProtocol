@@ -7,7 +7,9 @@ import (
 )
 
 // StreamAdapter abstracts a bidirectional QUIC stream.
-// It allows KittyClient to remain transport-agnostic and easily testable.
+//
+// This indirection allows KittyClient to remain transport-agnostic and
+// easily testable (e.g. with in-memory or mock streams).
 type StreamAdapter interface {
 	Read(p []byte) (int, error)
 	Write(p []byte) (int, error)
@@ -15,7 +17,7 @@ type StreamAdapter interface {
 
 	// QUIC-specific cancellation hooks are kept here because the current
 	// transport is QUIC. If we ever swap transport, a new adapter can
-	// implement these as no-ops.
+	// implement these as no-ops or map them to equivalent semantics.
 	CancelRead(code quic.StreamErrorCode)
 	CancelWrite(code quic.StreamErrorCode)
 }
