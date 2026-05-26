@@ -168,15 +168,15 @@ func (ui *CliUI) RunMainMenu(a *app.App) {
 }
 
 func (ui *CliUI) printMenu() {
-	ui.Println(ColorBlue + "\n  ======================" + ColorReset)
-	ui.Println(ColorBlue + " | " + ColorGreen + "Dostępne komendy:    " + ColorBlue + "|")
-	ui.Println(" | " + ColorGreen + "->" + ColorReset + " /status <user>    " + ColorBlue + "|")
-	ui.Println(" | " + ColorGreen + "->" + ColorReset + " /secret <user>    " + ColorBlue + "|")
-	ui.Println(" | " + ColorGreen + "->" + ColorReset + " /chat <user>      " + ColorBlue + "|")
-	ui.Println(" | " + ColorGreen + "->" + ColorReset + " /accept <user>    " + ColorBlue + "|")
-	ui.Println(" | " + ColorGreen + "->" + ColorReset + " /refuse <user>    " + ColorBlue + "|")
-	ui.Println(" | " + ColorGreen + "->" + ColorReset + " /msg <tekst>      " + ColorBlue + "|")
-	ui.Println(" | " + ColorGreen + "->" + ColorReset + " /end              " + ColorBlue + "|")
-	ui.Println(" | " + ColorGreen + "->" + ColorReset + " /logout           " + ColorBlue + "|")
-	ui.Println(ColorBlue + "  ======================\n" + ColorReset)
+	ui.Println(ColorPink3 + "\n  ======================" + ColorReset)
+	ui.Println(ColorPink3 + " | " + ColorGreen + "Dostępne komendy:    " + ColorPink3 + "|")
+	ui.Println(" | " + ColorGreen + "->" + ColorReset + " /status <user>    " + ColorPink3 + "|")
+	ui.Println(" | " + ColorGreen + "->" + ColorReset + " /secret <user>    " + ColorPink3 + "|")
+	ui.Println(" | " + ColorGreen + "->" + ColorReset + " /chat <user>      " + ColorPink3 + "|")
+	ui.Println(" | " + ColorGreen + "->" + ColorReset + " /accept <user>    " + ColorPink3 + "|")
+	ui.Println(" | " + ColorGreen + "->" + ColorReset + " /refuse <user>    " + ColorPink3 + "|")
+	ui.Println(" | " + ColorGreen + "->" + ColorReset + " /msg <tekst>      " + ColorPink3 + "|")
+	ui.Println(" | " + ColorGreen + "->" + ColorReset + " /end              " + ColorPink3 + "|")
+	ui.Println(" | " + ColorGreen + "->" + ColorReset + " /logout           " + ColorPink3 + "|")
+	ui.Println(ColorPink3 + "  ======================\n" + ColorReset)
 }

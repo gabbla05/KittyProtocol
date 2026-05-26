@@ -8,18 +8,18 @@ import (
 	"github.com/gabbla05/KittyProtocol/client/api"
 )
 
+// ErrQuitRequested is returned when the user chooses /quit during auth flow.
 var ErrQuitRequested = errors.New("quit requested")
 
-// Async AUTH/REGISTER flow
+// authTimeout defines how long the UI waits for AUTH/REGISTER results.
+const authTimeout = 5 * time.Second
+
+// RunAuthFlowAsync drives the interactive LOGIN/REGISTER flow.
+// It is UI-only logic: no protocol state is mutated here.
+// Returns the user's password (for secret store) or ErrQuitRequested.
 func (ui *CliUI) RunAuthFlowAsync(client *api.KittyClient) (string, error) {
 	for {
-		ui.Println(ColorBlue + "\n  ==================" + ColorReset)
-		ui.Println(ColorBlue + " | Wybierz opcję:   |")
-		ui.Println(" |                  |")
-		ui.Println(" | " + ColorGreen + "->" + ColorReset + "   /login      " + ColorBlue + "|")
-		ui.Println(" | " + ColorGreen + "->" + ColorReset + "   /register   " + ColorBlue + "|")
-		ui.Println(" | " + ColorGreen + "->" + ColorReset + "   /quit       " + ColorBlue + "|")
-		ui.Println("  ==================\n" + ColorReset)
+		ui.printAuthMenu()
 		ui.Prompt()
 
 		cmd := strings.TrimSpace(ui.ReadLine())
@@ -30,57 +30,74 @@ func (ui *CliUI) RunAuthFlowAsync(client *api.KittyClient) (string, error) {
 			client.Close()
 			return "", ErrQuitRequested
 
-		// ----------------------------------------------------
-		// REGISTER (async)
-		// ----------------------------------------------------
 		case "/register":
-			user, pass := ui.ReadCredentials()
-
-			if err := client.SendRegister(user, pass); err != nil {
-				ui.Println("[Client] REGISTER send error:", err)
-				continue
+			if err := ui.handleRegister(client); err != nil {
+				ui.Println("[Client] REGISTER error:", err)
 			}
 
-			select {
-			case res := <-client.RegisterResult():
-				if !res.OK {
-					ui.Println("[Client] REGISTER failed:", res.Error())
-					continue
-				}
-				ui.Println("[Client] REGISTER OK — możesz się teraz zalogować.")
-
-			case <-time.After(5 * time.Second):
-				ui.Println("[Client] REGISTER timeout")
-				continue
-			}
-
-		// ----------------------------------------------------
-		// LOGIN (async)
-		// ----------------------------------------------------
 		case "/login":
-			user, pass := ui.ReadCredentials()
-
-			if err := client.SendAuth(user, pass); err != nil {
-				ui.Println("[Client] AUTH send error:", err)
+			pass, err := ui.handleLogin(client)
+			if err != nil {
+				ui.Println("[Client] AUTH error:", err)
 				continue
 			}
-
-			select {
-			case res := <-client.AuthResult():
-				if !res.OK {
-					ui.Println("[Client] AUTH failed:", res.Error())
-					continue
-				}
-				ui.Println("[Client] AUTH OK — zalogowano.")
-				return pass, nil
-
-			case <-time.After(5 * time.Second):
-				ui.Println("[Client] AUTH timeout")
-				continue
-			}
+			return pass, nil
 
 		default:
 			ui.Println("Nieznana komenda.")
 		}
+	}
+}
+
+// printAuthMenu prints the main AUTH/REGISTER menu.
+func (ui *CliUI) printAuthMenu() {
+	ui.Println(ColorBlue + "\n  ==================" + ColorReset)
+	ui.Println(ColorBlue + " | Wybierz opcję:   |")
+	ui.Println(" |                  |")
+	ui.Println(" | " + ColorGreen + "->" + ColorReset + "   /login      " + ColorBlue + "|")
+	ui.Println(" | " + ColorGreen + "->" + ColorReset + "   /register   " + ColorBlue + "|")
+	ui.Println(" | " + ColorGreen + "->" + ColorReset + "   /quit       " + ColorBlue + "|")
+	ui.Println("  ==================\n" + ColorReset)
+}
+
+// handleRegister performs the REGISTER flow.
+func (ui *CliUI) handleRegister(client *api.KittyClient) error {
+	user, pass := ui.ReadCredentials()
+
+	if err := client.SendRegister(user, pass); err != nil {
+		return err
+	}
+
+	select {
+	case res := <-client.RegisterResult():
+		if !res.OK {
+			return res
+		}
+		ui.Println("[Client] REGISTER OK — możesz się teraz zalogować.")
+		return nil
+
+	case <-time.After(authTimeout):
+		return errors.New("REGISTER timeout")
+	}
+}
+
+// handleLogin performs the AUTH flow and returns the password on success.
+func (ui *CliUI) handleLogin(client *api.KittyClient) (string, error) {
+	user, pass := ui.ReadCredentials()
+
+	if err := client.SendAuth(user, pass); err != nil {
+		return "", err
+	}
+
+	select {
+	case res := <-client.AuthResult():
+		if !res.OK {
+			return "", res
+		}
+		ui.Println("[Client] AUTH OK — zalogowano.")
+		return pass, nil
+
+	case <-time.After(authTimeout):
+		return "", errors.New("AUTH timeout")
 	}
 }
