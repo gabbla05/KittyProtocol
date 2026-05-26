@@ -2,8 +2,11 @@ package app
 
 import (
 	"github.com/gabbla05/KittyProtocol/client/api"
+	"github.com/gabbla05/KittyProtocol/client/app/chat"
 )
 
+// UI defines the minimal interface required by App.
+// It allows App to remain UI-agnostic (CLI, GUI, Wails, etc.).
 type UI interface {
 	ReadLine() string
 	ReadSharedSecret() []byte
@@ -12,40 +15,58 @@ type UI interface {
 	Prompt()
 }
 
+// App is the high-level application layer.
+// It wires together:
+//   - KittyClient (transport + E2EE)
+//   - ChatLogic (chat operations)
+//   - ChatState (local chat state)
+//   - ChatEventBridge (incoming events)
+//   - UI (presentation layer)
 type App struct {
 	client       *api.KittyClient
 	ui           UI
 	disconnected <-chan struct{}
-	chatState    *ChatState
-	secrets      *SecretStore
+
+	chatState  *chat.ChatState
+	chatLogic  *chat.ChatLogic
+	chatBridge *chat.ChatEventBridge
+
+	secrets *SecretStore
 }
 
+// NewApp constructs a new application layer instance.
 func NewApp(c *api.KittyClient, ui UI, disconnected <-chan struct{}) *App {
+	state := chat.NewChatState()
+
 	a := &App{
 		client:       c,
 		ui:           ui,
 		disconnected: disconnected,
-		chatState:    NewChatState(),
-		secrets:      nil,
+		chatState:    state,
+		chatLogic:    chat.NewChatLogic(c, state),
+		chatBridge:   chat.NewChatEventBridge(c, state),
 	}
 
-	a.attachEventHandlers()
-	go a.handleChatEvents()
+	a.attachCoreEventHandlers()
+
+	// Start chat event loop
+	go a.chatBridge.Run(func(msg string) {
+		a.ui.Printf("\n%s\n", msg)
+		a.ui.Prompt()
+	})
 
 	return a
 }
 
-func (a *App) attachEventHandlers() {
+func (a *App) attachCoreEventHandlers() {
 	c := a.client
 
 	// ERROR frame
 	c.OnError(func(code, desc string) {
-		// Jeśli w trakcie aktywnego czatu dostaniemy ERR_15,
-		// potraktuj to jako „peer zniknął” i zamknij lokalnie czat.
 		if code == "ERR_15" {
 			if active, _ := a.chatState.IsActive(); active {
 				a.chatState.EndChat()
-				a.ui.Printf("\n[CHAT] Czat zakończony (peer unavailable: %s).\n", desc)
+				a.ui.Printf("\n[CHAT] Chat ended (peer unavailable: %s).\n", desc)
 				a.ui.Prompt()
 				return
 			}
@@ -57,7 +78,8 @@ func (a *App) attachEventHandlers() {
 	// STATUS_RES frame
 	c.OnStatus(func(target, status string) {
 		if target == "" && status == "no_target" {
-			a.ui.Printf("\n[CHAT] Czat zakończony.\n> ")
+			a.ui.Printf("\n[CHAT] Chat ended.\n")
+			a.ui.Prompt()
 			return
 		}
 		a.ui.Printf("\n[STATUS] %s is %s\n", target, status)
@@ -66,13 +88,35 @@ func (a *App) attachEventHandlers() {
 
 	// Disconnect event
 	c.OnDisconnected(func(err error) {
-		// Przy rozłączeniu zawsze czyścimy stan czatu lokalnie.
 		a.chatState.EndChat()
 		a.ui.Printf("\n[DISCONNECTED] %v\n", err)
 		a.ui.Prompt()
 	})
 }
 
+// Disconnected returns a channel that is closed when the client disconnects.
+func (a *App) Disconnected() <-chan struct{} {
+	return a.disconnected
+}
+
+// Client exposes the underlying KittyClient for low-level operations
+// (e.g. SendBye, SendGetStatus, SetSharedSecretForPeer).
+func (a *App) Client() *api.KittyClient {
+	return a.client
+}
+
+// ChatState exposes the chat state for UI (e.g. to check active chat on /logout).
+func (a *App) ChatState() *chat.ChatState {
+	return a.chatState
+}
+
+// Secrets returns the secret store used for persisting shared secrets.
+func (a *App) Secrets() *SecretStore {
+	return a.secrets
+}
+
+// InitSecretStoreForUser initializes the secret store for a given user and
+// loads all stored shared secrets into KittyClient.
 func (a *App) InitSecretStoreForUser(username string, masterKey []byte) {
 	path := PathForUser(username)
 	a.secrets = NewSecretStore(path, masterKey)
@@ -82,42 +126,24 @@ func (a *App) InitSecretStoreForUser(username string, masterKey []byte) {
 	}
 }
 
-func (a *App) Client() *api.KittyClient      { return a.client }
-func (a *App) Secrets() *SecretStore         { return a.secrets }
-func (a *App) Disconnected() <-chan struct{} { return a.disconnected }
+// High-level chat operations — thin wrappers delegating to ChatLogic.
 
-// Udostępniamy ChatState dla UI (np. do obsługi /logout).
-func (a *App) ChatState() *ChatState {
-	return a.chatState
+func (a *App) StartChatRequest(target string) error {
+	return a.chatLogic.StartChatRequest(target)
 }
 
-func (a *App) handleChatEvents() {
-	for {
-		select {
-		case ev := <-a.client.ChatRequestEvents():
-			a.chatState.SetPendingRequest(ev.From)
-			a.ui.Printf("\n[CHAT] %s chce z Tobą rozmawiać. Użyj /accept %s lub /refuse %s\n",
-				ev.From, ev.From, ev.From)
-			a.ui.Prompt()
+func (a *App) AcceptChat(from string) error {
+	return a.chatLogic.AcceptChat(from)
+}
 
-		case ev := <-a.client.ChatAcceptEvents():
-			a.chatState.SetActive(ev.From)
-			a.ui.Printf("\n[CHAT] %s zaakceptował czat.\n", ev.From)
-			a.ui.Prompt()
+func (a *App) RefuseChat(from, reason string) error {
+	return a.chatLogic.RefuseChat(from, reason)
+}
 
-		case ev := <-a.client.ChatRefuseEvents():
-			a.chatState.ClearPendingRequest()
-			a.ui.Printf("\n[CHAT] %s odrzucił czat: %s\n", ev.From, ev.Reason)
-			a.ui.Prompt()
+func (a *App) EndChat(reason string) error {
+	return a.chatLogic.EndChat(reason)
+}
 
-		case ev := <-a.client.ChatEndEvents():
-			a.chatState.EndChat()
-			a.ui.Printf("\n[CHAT] %s zakończył czat: %s\n", ev.From, ev.Reason)
-			a.ui.Prompt()
-
-		case ev := <-a.client.ChatMessageEvents():
-			a.ui.Printf("\n[%s] %s\n", ev.From, ev.Text)
-			a.ui.Prompt()
-		}
-	}
+func (a *App) SendTextMessage(text string) error {
+	return a.chatLogic.SendTextMessage(text)
 }
