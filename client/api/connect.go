@@ -61,12 +61,13 @@ func (c *KittyClient) Connect(hubAddr string) error {
 	c.ackMgr = NewAckManager()
 	c.mu.Unlock()
 
+	c.setState(StateHandshaking)
+
 	// Send HELLO immediately (async handshake).
 	if err := c.SendHello(); err != nil {
 		return err
 	}
 
-	c.setState(StateHandshaking)
 	return nil
 }
 
