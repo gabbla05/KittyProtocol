@@ -3,6 +3,7 @@ package app
 import (
 	"github.com/gabbla05/KittyProtocol/client/api"
 	"github.com/gabbla05/KittyProtocol/client/app/chat"
+	"github.com/gabbla05/KittyProtocol/client/app/secretstore"
 )
 
 // UI defines the minimal interface required by App.
@@ -31,7 +32,7 @@ type App struct {
 	chatLogic  *chat.ChatLogic
 	chatBridge *chat.ChatEventBridge
 
-	secrets *SecretStore
+	secrets *secretstore.SecretStore
 }
 
 // NewApp constructs a new application layer instance.
@@ -111,15 +112,15 @@ func (a *App) ChatState() *chat.ChatState {
 }
 
 // Secrets returns the secret store used for persisting shared secrets.
-func (a *App) Secrets() *SecretStore {
+func (a *App) Secrets() *secretstore.SecretStore {
 	return a.secrets
 }
 
 // InitSecretStoreForUser initializes the secret store for a given user and
 // loads all stored shared secrets into KittyClient.
 func (a *App) InitSecretStoreForUser(username string, masterKey []byte) {
-	path := PathForUser(username)
-	a.secrets = NewSecretStore(path, masterKey)
+	path := secretstore.PathForUser(username)
+	a.secrets = secretstore.NewSecretStore(path, masterKey)
 
 	for peer, secret := range a.secrets.All() {
 		_ = a.client.SetSharedSecretForPeer(peer, secret)
