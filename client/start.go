@@ -12,6 +12,8 @@ import (
 )
 
 func Start() {
+	LoadEnv()
+	
 	client := api.NewKittyClient()
 	ui := ui_cli.NewCliUI(client)
 
