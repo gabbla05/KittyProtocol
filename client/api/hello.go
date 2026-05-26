@@ -8,13 +8,16 @@ import (
 	"github.com/gabbla05/KittyProtocol/protocol"
 )
 
+// SendHello sends the initial HELLO frame on the control stream.
+//
+// BEHAVIOR:
+//   - Requires an established QUIC connection (ensureConnected).
+//   - Does not block on any response; the result is delivered via HelloResult().
+//   - Intended to be called immediately after Connect().
 func (c *KittyClient) SendHello() error {
-	c.mu.Lock()
-	stream := c.stream
-	c.mu.Unlock()
-
-	if stream == nil {
-		return fmt.Errorf("stream is nil")
+	stream, err := c.ensureConnected()
+	if err != nil {
+		return fmt.Errorf("cannot send HELLO: %w", err)
 	}
 
 	frame := protocol.HelloFrame{
