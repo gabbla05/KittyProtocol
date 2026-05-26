@@ -19,7 +19,7 @@ func routeData(frame protocol.DataFrame, sender *protection.Session, senderStrea
 	// router.go — poprawiony fragment
 	if !ok {
 		// ERR_15 — Unknown Target
-		sendError(senderStream, protocol.ErrUnknownTarget, "Unknown target user")
+		sendError(senderStream, protocol.ErrUnknownTarget, "Unknown target user or user is offline")
 		return false
 	}
 
