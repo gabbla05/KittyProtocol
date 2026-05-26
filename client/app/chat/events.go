@@ -22,7 +22,7 @@ func (b *ChatEventBridge) Run(onEvent func(msg string)) {
 		select {
 		case ev := <-b.client.ChatRequestEvents():
 			b.chatState.SetPendingRequest(ev.From)
-			onEvent("[CHAT] " + ev.From + " wants to chat with you.")
+			onEvent("[CHAT] " + ev.From + " wants to chat with you. You can accept it or refuse it now")
 
 		case ev := <-b.client.ChatAcceptEvents():
 			b.chatState.SetActive(ev.From)

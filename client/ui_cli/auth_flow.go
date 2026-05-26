@@ -44,7 +44,7 @@ func (ui *CliUI) RunAuthFlowAsync(client *api.KittyClient) (string, error) {
 			return pass, nil
 
 		default:
-			ui.Println("Nieznana komenda.")
+			ui.Println("Unknown command.")
 		}
 	}
 }
@@ -52,7 +52,7 @@ func (ui *CliUI) RunAuthFlowAsync(client *api.KittyClient) (string, error) {
 // printAuthMenu prints the main AUTH/REGISTER menu.
 func (ui *CliUI) printAuthMenu() {
 	ui.Println(ColorBlue + "\n  ==================" + ColorReset)
-	ui.Println(ColorBlue + " | Wybierz opcję:   |")
+	ui.Println(ColorBlue + " | Choose option:   |")
 	ui.Println(" |                  |")
 	ui.Println(" | " + ColorGreen + "->" + ColorReset + "   /login      " + ColorBlue + "|")
 	ui.Println(" | " + ColorGreen + "->" + ColorReset + "   /register   " + ColorBlue + "|")
@@ -73,7 +73,7 @@ func (ui *CliUI) handleRegister(client *api.KittyClient) error {
 		if !res.OK {
 			return res
 		}
-		ui.Println("[Client] REGISTER OK — możesz się teraz zalogować.")
+		ui.Println("[Client] REGISTER OK — you can log in now.")
 		return nil
 
 	case <-time.After(authTimeout):
@@ -94,7 +94,7 @@ func (ui *CliUI) handleLogin(client *api.KittyClient) (string, error) {
 		if !res.OK {
 			return "", res
 		}
-		ui.Println("[Client] AUTH OK — zalogowano.")
+		ui.Println("[Client] AUTH OK — logged in.")
 		return pass, nil
 
 	case <-time.After(authTimeout):

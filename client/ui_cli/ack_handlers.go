@@ -4,9 +4,10 @@ import "fmt"
 
 // OnDelivered is called when the AckManager reports successful delivery.
 // This is UI-only feedback and does not affect application logic.
+// UNCOMMENT BODY IF YOU WANT TO SEE IF MESSAGE WAS DELIVERED
 func (ui *CliUI) OnDelivered(msgID int64) {
-	fmt.Printf(ColorGreen+"\n[Delivered] msg_id=%d\n"+ColorReset, msgID)
-	ui.Prompt()
+	//fmt.Printf(ColorGreen+"\n[Delivered] msg_id=%d\n"+ColorReset, msgID)
+	//ui.Prompt()
 }
 
 // OnTimeout is called when the AckManager reports a delivery timeout.
