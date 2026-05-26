@@ -11,7 +11,8 @@ import (
 // PING frames to keep the KittyProtocol session active.
 //
 // Although QUIC has its own keep-alive mechanisms, the Hub expects
-// application-level PING frames to detect idle clients.
+// application-level PING frames to detect idle clients and clean up
+// stale sessions.
 //
 // The loop terminates when:
 //   - stopPing channel is closed,
@@ -23,12 +24,12 @@ func (c *KittyClient) StartPingLoop() {
 	stop := c.stopPing
 	c.mu.Unlock()
 
-	if stream == nil {
+	if stream == nil || stop == nil {
 		return
 	}
 
 	go func() {
-		ticker := time.NewTicker(30 * time.Second)
+		ticker := time.NewTicker(defaultPingInterval)
 		defer ticker.Stop()
 
 		for {
@@ -47,7 +48,7 @@ func (c *KittyClient) StartPingLoop() {
 
 				frame := protocol.PingFrame{
 					BaseFrame: protocol.BaseFrame{
-						Type:  "PING",
+						Type:  protocol.FrameTypePing,
 						MsgID: time.Now().UnixMilli(),
 					},
 				}

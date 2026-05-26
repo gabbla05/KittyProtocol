@@ -1,16 +1,31 @@
-package main
+// handler_bye.go
+// Handles the BYE frame — clean session termination requested by the client.
 
-import "fmt"
+package hub
 
-// handleBye processes the BYE frame.
-// It removes the session from SessionManager and triggers cleanup.
-func (c *clientContext) handleBye() {
-	if c.session != nil {
-		fmt.Println("[Handler: Bye] Cleaning up session for:", c.username)
-		globalSessions.Remove(c.username)
-		if c.session.CloseFunc != nil {
-			c.session.CloseFunc()
-		}
-		c.session = nil
+import (
+	"github.com/gabbla05/KittyProtocol/protocol"
+)
+
+func (c *clientContext) handleBye(raw []byte) {
+	if c.state != stateAuthenticated {
+		sendError(c.stream, protocol.ErrProtocolViolation, "BYE not allowed before AUTH")
+		return
 	}
+
+	if _, err := protocol.ParseByeFrame(raw); err != nil {
+		sendError(c.stream, protocol.ErrFormatError, err.Error())
+		return
+	}
+
+	logInfo("[BYE] Cleaning up session for user: %s", c.username)
+
+	globalSessions.Remove(c.username)
+
+	if c.session != nil && c.session.CloseFunc != nil {
+		c.session.CloseFunc()
+	}
+
+	c.session = nil
+	c.state = stateInit
 }

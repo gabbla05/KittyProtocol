@@ -1,65 +1,63 @@
-// hub/router.go
-// Routing logic for DATA frames between active user sessions.
+// router.go
+// Implements DATA frame forwarding between authenticated sessions.
+// This file contains no protocol parsing — only delivery logic.
 
-package main
+package hub
 
 import (
-    "encoding/json"
-    "fmt"
+	"encoding/json"
+	"time"
 
-    "github.com/gabbla05/KittyProtocol/internal/protection"
-    "github.com/gabbla05/KittyProtocol/protocol"
-    "github.com/quic-go/quic-go"
+	"github.com/gabbla05/KittyProtocol/internal/protection"
+	"github.com/gabbla05/KittyProtocol/protocol"
 )
 
-// routeData forwards a DATA frame from the sender to the target session.
-//
-// This function performs only transport‑level validation:
-//   - verifies that the target session exists,
-//   - verifies that the target stream is available,
-//   - forwards the DATA frame unchanged except for the Sender field.
-//
-// The Hub does NOT interpret application‑level payloads and does NOT
-// enforce chat‑level rules (e.g., active conversation state). All
-// application logic is handled by clients. The Hub acts strictly as
-// a message router.
-func routeData(frame protocol.DataFrame, sender *protection.Session, senderStream *quic.Stream) bool {
-    targetSess, ok := globalSessions.Get(frame.Target)
-    if !ok {
-        sendError(senderStream, "ERR_15", "Receiver offline")
-        return false
-    }
+// routeData forwards a DATA frame from sender → receiver.
+// Returns true on success, false if delivery failed.
+func routeData(frame protocol.DataFrame, sender *protection.Session, senderStream protection.Stream) bool {
+	targetSess, ok := globalSessions.Get(frame.Target)
+	// router.go — poprawiony fragment
+	if !ok {
+		// ERR_15 — Unknown Target
+		sendError(senderStream, protocol.ErrUnknownTarget, "Unknown target user or user is offline")
+		return false
+	}
 
-    if targetSess.Stream == nil {
-        sendError(senderStream, "ERR_10", "Receiver stream not available")
-        return false
-    }
+	if targetSess.Stream == nil {
+		// ERR_05 — Session Error (receiver session corrupted)
+		sendError(senderStream, protocol.ErrSessionError, "Receiver stream not available")
+		return false
+	}
 
-    // Construct the forwarded DATA frame. The Hub does not modify
-    // application payloads or metadata beyond setting the Sender field.
-    forward := protocol.DataFrame{
-        BaseFrame: protocol.BaseFrame{
-            Type:  "DATA",
-            MsgID: frame.MsgID,
-        },
-        Sender:  sender.ID,
-        Target:  frame.Target,
-        Payload: frame.Payload,
-        MAC:     frame.MAC,
-    }
+	// Update activity timestamps
+	now := time.Now()
+	sender.LastActive = now
+	targetSess.LastActive = now
 
-    fb, err := json.Marshal(forward)
-    if err != nil {
-        fmt.Println("[Hub: Router] Failed to marshal forwarded DATA:", err)
-        sendError(senderStream, "ERR_02", "Failed to marshal forwarded DATA")
-        return false
-    }
+	// Build forwarded DATA frame
+	forward := protocol.DataFrame{
+		BaseFrame: protocol.BaseFrame{
+			Type:  protocol.FrameTypeData,
+			MsgID: frame.MsgID,
+		},
+		Sender:  sender.ID,
+		Target:  frame.Target,
+		Payload: frame.Payload,
+		MAC:     frame.MAC,
+	}
 
-    if _, err := targetSess.Stream.Write(fb); err != nil {
-        fmt.Println("[Hub: Router] Failed to deliver DATA to receiver:", err)
-        sendError(senderStream, "ERR_10", "Failed to deliver to receiver")
-        return false
-    }
+	fb, err := json.Marshal(forward)
+	if err != nil {
+		logError("[Router] Failed to marshal forwarded DATA: %v", err)
+		sendError(senderStream, protocol.ErrFormatError, "Failed to marshal forwarded DATA")
+		return false
+	}
 
-    return true
+	if _, err := targetSess.Stream.Write(fb); err != nil {
+		logError("[Router] Failed to deliver DATA: %v", err)
+		sendError(senderStream, protocol.ErrSessionError, "Failed to deliver to receiver")
+		return false
+	}
+
+	return true
 }

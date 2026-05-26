@@ -2,35 +2,72 @@ package api
 
 import (
 	"encoding/json"
-	"errors"
 	"time"
 
 	"github.com/gabbla05/KittyProtocol/protocol"
 )
 
-// SendAuth sends an AUTH frame with username and password to the Hub.
-//
-// SECURITY:
-//   - Credentials are transmitted inside a TLS 1.3 encrypted QUIC stream.
-//   - The Hub validates credentials and responds with MEOW_OK or ERROR.
-//
-// PROTOCOL ORDER:
-//  1. SendHello()
-//  2. WaitForHelloOK()
-//  3. SendAuth()
-//  4. WaitForAuthOK()
-func (c *KittyClient) SendAuth(user, pass string) error {
-	c.mu.Lock()
-	stream := c.stream
-	c.mu.Unlock()
+// -----------------------------------------------------------------------------
+// AUTH / REGISTER (asynchronous)
+// -----------------------------------------------------------------------------
 
-	if stream == nil {
-		return errors.New("stream is nil")
+// SendAuth sends an AUTH frame with the provided credentials.
+//
+// BEHAVIOR:
+//   - Requires an established QUIC connection (ensureConnected).
+//   - Updates internal client state to StateAuthenticating.
+//   - Stores the username on the client instance.
+//   - The result is delivered asynchronously via AuthResult().
+func (c *KittyClient) SendAuth(user, pass string) error {
+	return c.sendAuthLikeFrame(protocol.FrameTypeAuth, user, pass, StateAuthenticating, func() {
+		c.user = user
+	})
+}
+
+// AuthResult returns a read-only channel that delivers the result
+// of the last AUTH operation.
+func (c *KittyClient) AuthResult() <-chan OpResult {
+	return c.authCh
+}
+
+// SendRegister sends a REGISTER frame with the provided credentials.
+//
+// BEHAVIOR:
+//   - Requires an established QUIC connection (ensureConnected).
+//   - Updates internal client state to StateRegistering.
+//   - The result is delivered asynchronously via RegisterResult().
+func (c *KittyClient) SendRegister(user, pass string) error {
+	return c.sendAuthLikeFrame(protocol.FrameTypeRegister, user, pass, StateRegistering, nil)
+}
+
+// RegisterResult returns a read-only channel that delivers the result
+// of the last REGISTER operation.
+func (c *KittyClient) RegisterResult() <-chan OpResult {
+	return c.registerCh
+}
+
+// sendAuthLikeFrame is a shared helper for AUTH and REGISTER flows.
+//
+// PARAMETERS:
+//   - frameType: protocol.FrameTypeAuth or protocol.FrameTypeRegister.
+//   - user, pass: credentials to send.
+//   - nextState: client state to set before sending.
+//   - beforeUnlock: optional hook executed under lock before releasing it
+//     (e.g. to store username).
+func (c *KittyClient) sendAuthLikeFrame(
+	frameType string,
+	user, pass string,
+	nextState ClientState,
+	beforeUnlock func(),
+) error {
+	stream, err := c.ensureConnected()
+	if err != nil {
+		return err
 	}
 
 	frame := protocol.AuthFrame{
 		BaseFrame: protocol.BaseFrame{
-			Type:  "AUTH",
+			Type:  frameType,
 			MsgID: time.Now().UnixMilli(),
 		},
 		User: user,
@@ -42,47 +79,23 @@ func (c *KittyClient) SendAuth(user, pass string) error {
 		return err
 	}
 
+	c.mu.Lock()
+	if beforeUnlock != nil {
+		beforeUnlock()
+	}
+	c.state = nextState
+	c.mu.Unlock()
+
 	_, err = stream.Write(b)
 	return err
 }
 
-// waitAuthOK waits for MEOW_OK or ERROR after AUTH.
-// Returns (success, errorCode).
-//
-// BLOCKING BEHAVIOR:
-//   - This call blocks until the Hub responds or the stream errors.
-//   - QUIC idle timeout ensures this does not block indefinitely.
-func (c *KittyClient) waitAuthOK() (bool, string) {
-	c.mu.Lock()
-	stream := c.stream
-	c.mu.Unlock()
+// -----------------------------------------------------------------------------
+// HELLO (asynchronous)
+// -----------------------------------------------------------------------------
 
-	buf := make([]byte, 4096)
-	n, err := stream.Read(buf)
-	if err != nil {
-		return false, "READ_ERROR"
-	}
-
-	typeName, _, err := protocol.GetFrameType(buf[:n])
-	if err != nil {
-		return false, "PARSE_ERROR"
-	}
-
-	switch typeName {
-	case "ERROR":
-		var errFrame protocol.ErrorFrame
-		if json.Unmarshal(buf[:n], &errFrame) == nil {
-			return false, errFrame.Code
-		}
-		return false, "PARSE_ERROR"
-
-	case "MEOW_OK":
-		var okFrame protocol.MeowOkFrame
-		if json.Unmarshal(buf[:n], &okFrame) != nil {
-			return false, "PARSE_ERROR"
-		}
-		return true, ""
-	}
-
-	return false, "UNKNOWN_FRAME"
+// HelloResult returns a read-only channel that delivers the result
+// of the initial HELLO handshake.
+func (c *KittyClient) HelloResult() <-chan OpResult {
+	return c.helloCh
 }

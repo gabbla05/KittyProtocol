@@ -79,7 +79,7 @@
  ### Komendy:
  - `/status <user>` – wysyła GET_STATUS.
  - `/chat <user>` – wchodzi w tryb czatu.
- - `/quit` – wysyła BYE i kończy.
+ - `/logout` – wylogowuje się, kończy sesję i zamyka program klienta.
 
  ---
 

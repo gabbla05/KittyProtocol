@@ -1,0 +1,41 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Go build cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-build-${{ hashFiles('**/go.sum') }}
+
+      - name: Build hub
+        run: go build -v -o bin/kitty-hub ./cmd/hub
+
+      - name: Build client
+        run: go build -v -o bin/kitty-client ./cmd/client
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            bin/kitty-hub
+            bin/kitty-client
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

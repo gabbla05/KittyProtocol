@@ -9,11 +9,10 @@ import (
 	"fmt"
 )
 
-// DecryptAndVerifyWithKeys verifies HMAC(cipher || msg_id || target) and
-// decrypts BASE64(nonce||cipher) using AES-GCM.
-//
-// Returns plaintext if both HMAC and decryption succeed.
-
+// DecryptAndVerifyWithKeys verifies HMAC and decrypts the payload using AES-GCM.
+// It expects:
+//   - payloadB64: base64-encoded nonce || ciphertext
+//   - macB64:     base64-encoded HMAC-SHA256 over cipher || msg_id || canonical_target.
 func DecryptAndVerifyWithKeys(msgID int64, target, payloadB64, macB64 string, kEnc, kMac []byte) (string, error) {
 	raw, err := base64.StdEncoding.DecodeString(payloadB64)
 	if err != nil {
@@ -43,6 +42,8 @@ func DecryptAndVerifyWithKeys(msgID int64, target, payloadB64, macB64 string, kE
 	nonce := raw[:nonceSize]
 	ciphertext := raw[nonceSize:]
 
+	aad := []byte(fmt.Sprintf("msgid=%d;target=%s;v=%d", msgID, canonicalizeTarget(target), aadFormatVersion))
+
 	macInput := buildMACInput(ciphertext, msgID, target)
 	h := hmac.New(sha256.New, kMac)
 	h.Write(macInput)
@@ -52,7 +53,7 @@ func DecryptAndVerifyWithKeys(msgID int64, target, payloadB64, macB64 string, kE
 		return "", fmt.Errorf("HMAC verification failed")
 	}
 
-	plaintext, err := aead.Open(nil, nonce, ciphertext, nil)
+	plaintext, err := aead.Open(nil, nonce, ciphertext, aad)
 	if err != nil {
 		return "", fmt.Errorf("decryption failed: %w", err)
 	}

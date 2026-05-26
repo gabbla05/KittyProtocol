@@ -1,144 +1,156 @@
-package main
+package hub
 
 import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
 	"io"
-	"os"
 	"testing"
-	"time"
 
-	"github.com/gabbla05/KittyProtocol/internal/certmanager"
-	"github.com/gabbla05/KittyProtocol/internal/protection"
 	"github.com/gabbla05/KittyProtocol/protocol"
 	"github.com/quic-go/quic-go"
 )
 
+// TestSecurityScenarios validates Hub‑level security mechanisms:
+// 1. ERR_06 — replay attack detection
+// 2. ERR_02 — malformed JSON injection.
+//
+// This test runs against an isolated Hub instance created by StartTestHub(),
+// ensuring no interference with global state or other tests.
 func TestSecurityScenarios(t *testing.T) {
-	// Inicjalizacja globalnej mapy sesji
-	globalSessions = protection.NewSessionManager()
-
-	// Przygotowanie certyfikatów
-	err := os.MkdirAll("../certs", 0755)
+	// Start isolated Hub instance
+	addr, stop, err := StartTestHub()
 	if err != nil {
-		t.Fatalf("Nie udało się utworzyć folderu certs: %v", err)
+		t.Fatalf("Failed to start test Hub: %v", err)
 	}
-	tlsConf, err := certmanager.SetupTLSConfig("../certs/cert.pem", "../certs/key.pem")
-	if err != nil {
-		t.Fatalf("Błąd konfiguracji TLS: %v", err)
-	}
-
-	// Uruchomienie listenera
-	listener, err := quic.ListenAddr("127.0.0.1:0", tlsConf, nil)
-	if err != nil {
-		t.Fatalf("Błąd uruchamiania listenera: %v", err)
-	}
-	defer listener.Close()
-
-	// Nasłuchiwanie
-	go func() {
-		for {
-			conn, err := listener.Accept(context.Background())
-			if err != nil {
-				return
-			}
-			go handleClient(conn)
-		}
-	}()
+	defer stop()
 
 	clientTLS := &tls.Config{
 		InsecureSkipVerify: true,
 		NextProtos:         []string{"kitty-quic-v1"},
 	}
 
+	// ============================================================
+	// ERR_06 — Replay Attack Detection
+	// ============================================================
 	t.Run("ERR_06_ReplayAttack", func(t *testing.T) {
-		conn, err := quic.DialAddr(context.Background(), listener.Addr().String(), clientTLS, nil)
+		conn, err := quic.DialAddr(context.Background(), addr, clientTLS, nil)
 		if err != nil {
-			t.Fatalf("Błąd połączenia: %v", err)
+			t.Fatalf("Connection error: %v", err)
 		}
 		defer conn.CloseWithError(0, "")
 
 		stream, err := conn.OpenStreamSync(context.Background())
 		if err != nil {
-			t.Fatalf("Błąd strumienia: %v", err)
+			t.Fatalf("Stream open error: %v", err)
 		}
 
-		// 1. HELLO i AUTH
+		buf := make([]byte, 1024)
+
+		// HELLO
 		hello := protocol.HelloFrame{
-			BaseFrame: protocol.BaseFrame{Type: "HELLO", MsgID: time.Now().UnixMilli()},
+			BaseFrame: protocol.BaseFrame{Type: protocol.FrameTypeHello, MsgID: 1},
 			Version:   "1.0",
 		}
 		hb, _ := json.Marshal(hello)
-		stream.Write(hb)
-		buf := make([]byte, 1024)
-		stream.Read(buf)
+		if _, err := stream.Write(hb); err != nil {
+			t.Fatalf("HELLO write error: %v", err)
+		}
+		if _, err := stream.Read(buf); err != nil && err != io.EOF {
+			t.Fatalf("HELLO response read error: %v", err)
+		}
 
+		// AUTH
 		authFrame := protocol.AuthFrame{
-			BaseFrame: protocol.BaseFrame{Type: "AUTH", MsgID: time.Now().UnixMilli()},
+			BaseFrame: protocol.BaseFrame{Type: protocol.FrameTypeAuth, MsgID: 2},
 			User:      "alice",
 			Pass:      "secret",
 		}
 		ab, _ := json.Marshal(authFrame)
-		stream.Write(ab)
-		stream.Read(buf) // Odbiór MEOW_OK
+		if _, err := stream.Write(ab); err != nil {
+			t.Fatalf("AUTH write error: %v", err)
+		}
+		if _, err := stream.Read(buf); err != nil && err != io.EOF {
+			t.Fatalf("AUTH response read error: %v", err)
+		}
 
-		// 2. Pierwsza ramka DATA
-		msgID := time.Now().UnixMilli()
+		// DATA → Alice (self‑send to ensure routing succeeds)
+		msgID := int64(100)
 		dataFrame := protocol.DataFrame{
-			BaseFrame: protocol.BaseFrame{Type: "DATA", MsgID: msgID},
-			Target:    "bob",
+			BaseFrame: protocol.BaseFrame{Type: protocol.FrameTypeData, MsgID: msgID},
+			Target:    "alice",
 			Payload:   "SGVsbG8=",
 			MAC:       "dummyMAC",
 		}
 		db, _ := json.Marshal(dataFrame)
-		stream.Write(db)
-		stream.Read(buf) // Huba odpowiada (MEOW_OK lub ERR_15) i zapisuje MsgID w cache'u anty-replay
 
-		// 3. Replay (ponowne wysłanie tej samej ramki z tym samym MsgID)
-		stream.Write(db)
-		n, err := stream.Read(buf)
-		if err != nil && err != io.EOF {
-			t.Fatalf("Błąd odczytu: %v", err)
+		// First send — should be accepted
+		if _, err := stream.Write(db); err != nil {
+			t.Fatalf("First DATA write error: %v", err)
+		}
+		if _, err := stream.Read(buf); err != nil && err != io.EOF {
+			t.Fatalf("First DATA response read error: %v", err)
 		}
 
-		// 4. Weryfikacja
-		var errResp protocol.ErrorFrame
-		json.Unmarshal(buf[:n], &errResp)
+		// Replay — same MsgID
+		if _, err := stream.Write(db); err != nil {
+			t.Fatalf("Replay DATA write error: %v", err)
+		}
+		n, err := stream.Read(buf)
+		if err != nil && err != io.EOF {
+			t.Fatalf("Replay DATA response read error: %v", err)
+		}
+		if n == 0 {
+			t.Fatalf("Received EOF without data on replay")
+		}
 
-		if errResp.Code != "ERR_06" {
-			t.Errorf("Oczekiwano ERR_06 (Replay detected), otrzymano: %s", errResp.Code)
+		var errResp protocol.ErrorFrame
+		if err := json.Unmarshal(buf[:n], &errResp); err != nil {
+			t.Fatalf("Failed to unmarshal ERROR frame: %v", err)
+		}
+
+		if errResp.Code != protocol.ErrReplayDetected {
+			t.Errorf("Expected ERR_06 (Replay detected), got: %s", errResp.Code)
 		}
 	})
 
+	// ============================================================
+	// ERR_02 — Malformed JSON Injection
+	// ============================================================
 	t.Run("ERR_02_Injection", func(t *testing.T) {
-		conn, err := quic.DialAddr(context.Background(), listener.Addr().String(), clientTLS, nil)
+		conn, err := quic.DialAddr(context.Background(), addr, clientTLS, nil)
 		if err != nil {
-			t.Fatalf("Błąd połączenia: %v", err)
+			t.Fatalf("Connection error: %v", err)
 		}
 		defer conn.CloseWithError(0, "")
 
 		stream, err := conn.OpenStreamSync(context.Background())
 		if err != nil {
-			t.Fatalf("Błąd strumienia: %v", err)
+			t.Fatalf("Stream open error: %v", err)
 		}
 
-		// 1. Wstrzyknięcie złośliwych danych zamiast struktury JSON
+		// Malformed JSON payload (invalid syntax)
 		badData := []byte(`{DROP TABLE users; HACK THE PLANET}`)
-		stream.Write(badData)
+		if _, err := stream.Write(badData); err != nil {
+			t.Fatalf("Malformed DATA write error: %v", err)
+		}
 
 		buf := make([]byte, 1024)
 		n, err := stream.Read(buf)
 		if err != nil && err != io.EOF {
-			t.Fatalf("Błąd odczytu: %v", err)
+			t.Fatalf("Malformed DATA response read error: %v", err)
+		}
+		if n == 0 {
+			t.Fatalf("Received EOF without data for malformed JSON")
 		}
 
-		// 2. Weryfikacja błędu z parsera JSON
 		var errResp protocol.ErrorFrame
-		json.Unmarshal(buf[:n], &errResp)
+		if err := json.Unmarshal(buf[:n], &errResp); err != nil {
+			t.Fatalf("Failed to unmarshal ERROR frame: %v", err)
+		}
 
-		if errResp.Code != "ERR_02" {
-			t.Errorf("Oczekiwano ERR_02 (błąd formatu), otrzymano: %s", errResp.Code)
+		if errResp.Code != protocol.ErrFormatError {
+			t.Errorf("Expected ERR_02 (Format error), got: %s", errResp.Code)
 		}
 	})
 }
