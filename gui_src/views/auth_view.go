@@ -6,10 +6,13 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas" // Dodane dla obsługi obrazków
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
 	"github.com/gabbla05/KittyProtocol/client/app"
+	"github.com/gabbla05/KittyProtocol/gui_src/resources"
 	"github.com/gabbla05/KittyProtocol/gui_src/state"
 )
 
@@ -21,6 +24,11 @@ func GetAuthView(s *state.UIState) fyne.CanvasObject {
 
 	passEntry := widget.NewPasswordEntry()
 	passEntry.SetPlaceHolder("Password")
+
+	// --- Logo z napisem ---
+	logo := canvas.NewImageFromResource(resources.LogoZNapisemPng)
+	logo.FillMode = canvas.ImageFillContain
+	logo.SetMinSize(fyne.NewSize(300, 150)) // Dostosuj rozmiar w razie potrzeby
 
 	loginBtn := widget.NewButton("Login", func() {
 		username := userEntry.Text
@@ -74,7 +82,6 @@ func GetAuthView(s *state.UIState) fyne.CanvasObject {
 				go s.Client.StartPingLoop()
 				log.Println("User authorized, switching to main menu!")
 
-				// --- ZMIANA TUTAJ: ZAPISUJEMY UI DO STANU ---
 				guiUI := &state.GuiUI{}
 				s.UI = guiUI
 				s.App = app.NewApp(s.Client, guiUI, disconnectedChan)
@@ -151,12 +158,14 @@ func GetAuthView(s *state.UIState) fyne.CanvasObject {
 		}()
 	})
 
-	return container.NewVBox(
-		widget.NewLabel("Welcome to Meowssenger"),
+	// STYLOWANY UKŁAD: Logo na górze, potem pola formularza
+	return container.NewPadded(container.NewCenter(container.NewVBox(
+		logo,
+		layout.NewSpacer(),
 		userEntry,
 		passEntry,
 		loginBtn,
 		widget.NewSeparator(),
 		registerBtn,
-	)
+	)))
 }

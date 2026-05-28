@@ -5,6 +5,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
+	_"github.com/gabbla05/KittyProtocol/gui_src/resources" // Poprawny import
 	"github.com/gabbla05/KittyProtocol/gui_src/state"
 )
 
@@ -14,14 +15,13 @@ func GetChatView(s *state.UIState, target string) fyne.CanvasObject {
 
 	// Duże, rozwijane pole z historią wiadomości
 	chatHistory := widget.NewMultiLineEntry()
-	chatHistory.Disable() // Zablokowane do edycji przez użytkownika
+	chatHistory.Disable() 
 	chatHistory.Wrapping = fyne.TextWrapWord
 	chatHistory.SetText("--- Chat Started ---\n")
 
-	// NASŁUCHIWANIE: Każda akcja z tła (wiadomości, statusy) wpadnie tutaj!
+	// NASŁUCHIWANIE
 	s.UI.OnMessage = func(msg string) {
-		current := chatHistory.Text
-		chatHistory.SetText(current + msg)
+		chatHistory.SetText(chatHistory.Text + msg + "\n")
 	}
 
 	msgEntry := widget.NewEntry()
@@ -39,23 +39,20 @@ func GetChatView(s *state.UIState, target string) fyne.CanvasObject {
 			return
 		}
 
-		// Po udanym wysłaniu, pokazujemy NASZĄ wiadomość u siebie w historii
-		chatHistory.SetText(chatHistory.Text + "\n[Ja]: " + text + "\n")
+		chatHistory.SetText(chatHistory.Text + "[Ja]: " + text + "\n")
 		msgEntry.SetText("")
 	})
 	sendBtn.Importance = widget.HighImportance
 
 	endChatBtn := widget.NewButton("End Chat", func() {
 		s.App.EndChat("User closed chat UI")
-		s.UI.OnMessage = nil // Odpinamy nasłuchiwanie by nie było bugów
+		s.UI.OnMessage = nil
 		s.SwitchView(GetMenuView(s))
 	})
 	endChatBtn.Importance = widget.DangerImportance
 
-	// Układ (Border) sprawi, że historia zajmie max dostępnego miejsca, a reszta przylgnie do krawędzi
+	// Układ (Border)
 	bottomBox := container.NewVBox(msgEntry, sendBtn, widget.NewSeparator(), endChatBtn)
-	
-	// Wrzucamy chatHistory w Scroll, żeby dało się przewijać suwakiem
 	historyScroll := container.NewVScroll(chatHistory)
 
 	return container.NewBorder(title, bottomBox, nil, nil, historyScroll)
