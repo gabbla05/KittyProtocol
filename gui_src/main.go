@@ -12,7 +12,8 @@ import (
 
 func main() {
     a := app.New()
-    // Ustawiamy tylko nasz własny motyw
+    
+    // Jeśli PinkTheme poprawnie implementuje fyne.Theme, użyj tego:
     a.Settings().SetTheme(&theme.PinkTheme{})
     
     w := a.NewWindow("Meowssenger")
