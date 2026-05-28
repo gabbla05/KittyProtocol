@@ -2,7 +2,7 @@
 
  # Kitty Protocol
 
-![image](resources/img/kitty_logo.png)
+![image](assets/img/kitty_logo.png)
 
  ## Project Overview
 
