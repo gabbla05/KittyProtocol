@@ -1,21 +1,25 @@
 package views
 
 import (
+	"image/color"
+
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
-	_"github.com/gabbla05/KittyProtocol/gui_src/resources" // Poprawny import
 	"github.com/gabbla05/KittyProtocol/gui_src/state"
 )
 
 func GetChatView(s *state.UIState, target string) fyne.CanvasObject {
-	title := widget.NewLabel("Chatting with: " + target)
-	title.TextStyle = fyne.TextStyle{Bold: true}
+	// --- Nagłówek ---
+	titleText := canvas.NewText("Chatting with: "+target, color.NRGBA{R: 255, G: 105, B: 180, A: 255})
+	titleText.TextSize = 22
+	titleText.TextStyle = fyne.TextStyle{Bold: true}
 
-	// Duże, rozwijane pole z historią wiadomości
+	// --- Historia czatu ---
 	chatHistory := widget.NewMultiLineEntry()
-	chatHistory.Disable() 
+	chatHistory.Disable()
 	chatHistory.Wrapping = fyne.TextWrapWord
 	chatHistory.SetText("--- Chat Started ---\n")
 
@@ -24,6 +28,7 @@ func GetChatView(s *state.UIState, target string) fyne.CanvasObject {
 		chatHistory.SetText(chatHistory.Text + msg + "\n")
 	}
 
+	// --- Elementy sterujące ---
 	msgEntry := widget.NewEntry()
 	msgEntry.SetPlaceHolder("Type your message here...")
 
@@ -39,7 +44,7 @@ func GetChatView(s *state.UIState, target string) fyne.CanvasObject {
 			return
 		}
 
-		chatHistory.SetText(chatHistory.Text + "[Ja]: " + text + "\n")
+		chatHistory.SetText(chatHistory.Text + "[Me]: " + text + "\n")
 		msgEntry.SetText("")
 	})
 	sendBtn.Importance = widget.HighImportance
@@ -51,9 +56,25 @@ func GetChatView(s *state.UIState, target string) fyne.CanvasObject {
 	})
 	endChatBtn.Importance = widget.DangerImportance
 
-	// Układ (Border)
-	bottomBox := container.NewVBox(msgEntry, sendBtn, widget.NewSeparator(), endChatBtn)
-	historyScroll := container.NewVScroll(chatHistory)
+	// --- Układ z wykorzystaniem formLayout ---
+	// Używamy tego samego layoutu co w auth/menu, aby zachować szerokość 350px
+	bottomBox := container.New(&formLayout{},
+		msgEntry,
+		sendBtn,
+		widget.NewSeparator(),
+		endChatBtn,
+	)
 
-	return container.NewBorder(title, bottomBox, nil, nil, historyScroll)
+	historyScroll := container.NewVScroll(chatHistory)
+	// Ustawiamy wysokość historii, aby zostawić miejsce na formularz
+	historyScroll.SetMinSize(fyne.NewSize(350, 300))
+
+	// Złożenie wszystkiego w całość
+	return container.NewBorder(
+		container.NewPadded(container.NewCenter(titleText)),
+		container.NewCenter(container.NewPadded(bottomBox)),
+		nil,
+		nil,
+		container.NewCenter(historyScroll),
+	)
 }

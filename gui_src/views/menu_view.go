@@ -2,13 +2,12 @@ package views
 
 import (
 	"errors"
-	"strings"
+	"image/color"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
-	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
 	"github.com/gabbla05/KittyProtocol/client/api"
 	"github.com/gabbla05/KittyProtocol/gui_src/resources"
@@ -16,29 +15,24 @@ import (
 )
 
 func GetMenuView(s *state.UIState) fyne.CanvasObject {
-	// --- Logotyp w rogu ---
-	ikona := canvas.NewImageFromResource(resources.LogoIkonaPng)
-	ikona.SetMinSize(fyne.NewSize(60, 60))
-	header := container.NewHBox(ikona, layout.NewSpacer())
+	// --- Logo ---
+	logo := canvas.NewImageFromResource(resources.LogoZNapisemPng)
+	logo.FillMode = canvas.ImageFillContain
+	logo.SetMinSize(fyne.NewSize(300, 150))
 
-	title := widget.NewLabel("Main Menu")
-	title.TextStyle = fyne.TextStyle{Bold: true}
+	// Tytuł
+	titleText := canvas.NewText("Main Menu", color.NRGBA{R: 255, G: 105, B: 180, A: 255})
+	titleText.TextSize = 32
+	titleText.TextStyle = fyne.TextStyle{Bold: true}
 
+	// --- Pola wejściowe ---
 	targetEntry := widget.NewEntry()
-	targetEntry.SetPlaceHolder("Target username (e.g. bob)")
+	targetEntry.SetPlaceHolder("Target username")
 
 	secretEntry := widget.NewPasswordEntry()
-	secretEntry.SetPlaceHolder("E2EE Shared Secret (min. 16 chars)")
+	secretEntry.SetPlaceHolder("E2EE Shared Secret")
 
-	// --- Nasłuchiwanie powiadomień ---
-	s.UI.OnMessage = func(msg string) {
-		if strings.Contains(msg, "CHAT_REQUEST received") {
-			dialog.ShowInformation("Incoming Chat!", msg, s.Window)
-		} else if strings.Contains(msg, "refused") {
-			dialog.ShowInformation("Chat Refused", msg, s.Window)
-		}
-	}
-
+	// --- Przyciski ---
 	statusBtn := widget.NewButton("Check Status", func() {
 		target := targetEntry.Text
 		if target == "" {
@@ -55,7 +49,7 @@ func GetMenuView(s *state.UIState) fyne.CanvasObject {
 		target := targetEntry.Text
 		secret := secretEntry.Text
 		if target == "" || len(secret) < 16 {
-			dialog.ShowInformation("Error", "Enter target and valid secret (min 16 chars)!", s.Window)
+			dialog.ShowInformation("Error", "Secret must be min 16 chars!", s.Window)
 			return
 		}
 		s.App.Secrets().Set(target, []byte(secret))
@@ -81,7 +75,7 @@ func GetMenuView(s *state.UIState) fyne.CanvasObject {
 		s.SwitchView(GetChatView(s, target))
 	})
 
-	acceptChatBtn := widget.NewButton("Accept Incoming Chat", func() {
+	acceptChatBtn := widget.NewButton("Accept Incoming", func() {
 		target := targetEntry.Text
 		if target == "" {
 			dialog.ShowInformation("Error", "Enter username!", s.Window)
@@ -95,18 +89,19 @@ func GetMenuView(s *state.UIState) fyne.CanvasObject {
 		s.SwitchView(GetChatView(s, target))
 	})
 
-	refuseChatBtn := widget.NewButton("Refuse Incoming Chat", func() {
+	// --- NOWY PRZYCISK: REFUSE CHAT ---
+	refuseChatBtn := widget.NewButton("Refuse Incoming", func() {
 		target := targetEntry.Text
 		if target == "" {
-			dialog.ShowInformation("Error", "Enter username!", s.Window)
+			dialog.ShowInformation("Error", "Enter username to refuse!", s.Window)
 			return
 		}
-		err := s.App.RefuseChat(target, "Declined via GUI")
+		err := s.App.RefuseChat(target, "User refused via GUI")
 		if err != nil {
 			dialog.ShowError(err, s.Window)
 			return
 		}
-		dialog.ShowInformation("Success", "Chat refused.", s.Window)
+		dialog.ShowInformation("Success", "Chat request refused.", s.Window)
 	})
 
 	logoutBtn := widget.NewButton("Logout", func() {
@@ -114,12 +109,12 @@ func GetMenuView(s *state.UIState) fyne.CanvasObject {
 		s.App.Client().Close()
 		s.SwitchView(GetAuthView(s))
 	})
-	logoutBtn.Importance = widget.DangerImportance
 
 	// --- Finalny układ ---
-	menuContent := container.NewVBox(
-		title,
-		widget.NewLabel("1. Set target & E2EE secret:"),
+	menuContent := container.New(&formLayout{},
+		container.NewCenter(logo),
+		container.NewCenter(titleText),
+		widget.NewLabel("1. Configuration:"),
 		targetEntry,
 		secretEntry,
 		setSecretBtn,
@@ -128,10 +123,11 @@ func GetMenuView(s *state.UIState) fyne.CanvasObject {
 		statusBtn,
 		requestChatBtn,
 		acceptChatBtn,
-		refuseChatBtn,
+		refuseChatBtn, // <--- ADDED refuseChatBtn HERE
 		widget.NewSeparator(),
 		logoutBtn,
 	)
 
-	return container.NewBorder(header, nil, nil, nil, container.NewPadded(menuContent))
+	// Wyśrodkowanie całej zawartości
+	return container.NewCenter(container.NewPadded(menuContent))
 }

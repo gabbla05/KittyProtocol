@@ -18,7 +18,9 @@ func main() {
     
     w := a.NewWindow("Meowssenger")
     w.SetIcon(resources.LogoIkonaPng)
-    w.Resize(fyne.NewSize(500, 600))
+    // Ustawienie stałego rozmiaru
+    w.Resize(fyne.NewSize(400, 650))
+    w.SetFixedSize(true) // TO BLOKUJE ZMIANĘ ROZMIARU
 
 	// Inicjalizacja klienta
 	kittyClient := api.NewKittyClient()
