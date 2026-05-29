@@ -1,86 +1,191 @@
-[🇬🇧 English version](README.md) | 🇵🇱 *Wersja polska*
+<div align="center">
 
-# Kitty Protocol x Meowssenger
+<h1 align="center" style="
+    border-bottom: none;
+    font-family: 'Poppins', 'Segoe UI', sans-serif;
+    font-size: 3rem;
+    font-weight: 800;
+    background: linear-gradient(90deg, #ff4fa3, #ff85c1, #ffb6e6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 0 0 12px rgba(255, 105, 180, 0.35);
+    letter-spacing: 1px;
+    margin-bottom: 0;
+">
+    ✨ Kitty Protocol x Meowssenger ✨
+</h1>
 
-<div style="display: flex; gap: 5%; align-items: center; width: 100%;">
-  <img src="assets/img/kitty_logo.png" style="width: 60%; height: auto;">
-  <img src="gui_src/resources/assets/images/logo_z_napisem.png" style="width: 35%; height: auto;">
+<p align="center">
+  <img src="assets/img/kitty_logo.png" height="120" alt="Kitty Logo">
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="gui_src/resources/assets/images/logo_z_napisem.png" height="120" alt="Kitty Protocol">
+</p>
+
+<p align="center">
+  <strong>Cute • Secure • Decentralized Messaging 🐾</strong>
+</p>
+
+<p align="center">
+  Lekki, bezpieczny i nowoczesny komunikator oparty o własny protokół QUIC + E2EE.
+</p>
+
+---
+
+<p align="center">
+
+<img src="https://img.shields.io/badge/Protocol-Kitty%20Protocol-ff69b4?style=for-the-badge">
+<img src="https://img.shields.io/badge/Transport-QUIC-e75480?style=for-the-badge">
+<img src="https://img.shields.io/badge/Encryption-E2EE-ff1493?style=for-the-badge">
+<img src="https://img.shields.io/badge/Language-Go-f06292?style=for-the-badge&logo=go">
+<img src="https://img.shields.io/badge/GUI-Fyne-ff85c1?style=for-the-badge">
+
+</p>
+
+<p align="center">
+
+[![en](https://img.shields.io/badge/lang-en-blue.svg)](README.md)
+[![pl](https://img.shields.io/badge/lang-pl-red.svg)](README.pl.md)
+<img src="https://img.shields.io/badge/license-MIT-ff69b4.svg">
+<img src="https://img.shields.io/github/stars/gabbla05/KittyProtocol?style=social&dummy=1">
+
+</p>
+
 </div>
 
+---
 
+# 🐾 O projekcie
 
-## 🐾 Opis projektu
+## ✨ Czym jest Kitty Protocol?
 
-**Kitty Protocol** to autorski, lekki i bezpieczny protokół komunikacyjny zaprojektowany do szybkiej, prywatnej wymiany krótkich wiadomości tekstowych.  
-**Meowssenger** to system opierający się na architekturze **Client–Server**, gdzie centralny serwer (*Hub*) pełni wyłącznie rolę routera — **nie przechowuje historii**, **nie zna kluczy**, **nie ma dostępu do treści wiadomości**.
+**Kitty Protocol** to autorski, lekki i bezpieczny protokół komunikacyjny zaprojektowany do szybkiej, prywatnej wymiany wiadomości tekstowych.
 
-Projekt składa się z trzech głównych komponentów:
-- **Hub (serwer)** — router QUIC/TLS 1.3 z obsługą sesji, autoryzacji i ochrony przed atakami.
-   <img src="assets/img/hub.png" width="400">
-   <br><br>
+**Meowssenger** bazuje na architekturze **Client–Server**, gdzie centralny **Hub** pełni wyłącznie rolę routera:
 
-- **Klient CLI** — terminalowy interfejs użytkownika z pełną obsługą protokołu.
-   <img src="assets/img/meowssenger_cli_client.png" width="400">
-   <br><br>
+- 🚫 nie przechowuje historii wiadomości,
+- 🔐 nie posiada kluczy użytkowników,
+- 🛡️ nie ma dostępu do treści komunikacji.
 
-- **Klient GUI (Fyne)** — graficzna aplikacja desktopowa zbudowana w Go + Fyne.
-   <img src="assets/img/meowssenger_gui_client.png" width="400">
-   <br><br>
+Całość została zaprojektowana z naciskiem na:
+- prywatność,
+- wydajność,
+- bezpieczeństwo,
+- nowoczesny transport sieciowy.
 
 ---
 
-## ✨ Najważniejsze funkcje
+# 🖼️ Architektura projektu
 
-### 🔐 End‑to‑End Encryption (E2EE)
-Wszystkie wiadomości są szyfrowane **wyłącznie po stronie klienta**.  
-Hub nie posiada kluczy, nie może odszyfrować treści i nie przechowuje historii.
+<div align="center">
 
-### ⚡ Transport QUIC
-Protokół działa na warstwie **QUIC**:
-- niskie opóźnienia,
-- odporność na zmiany sieci (Wi‑Fi ↔ LTE),
-- wsparcie dla 0‑RTT,
-- natywne TLS 1.3.
+| Komponent | Opis |
+|---|---|
+| 🐈 Hub | Router QUIC/TLS 1.3 |
+| 💻 CLI Client | Terminalowy klient protokołu |
+| 🎨 GUI Client | Desktop app w Go + Fyne |
 
-### 🧩 Ramki JSON
-Wszystkie komunikaty protokołu są przesyłane w formacie **JSON**, co ułatwia debugowanie i rozwój.
-
-### 🛡️ Odporność na ataki
-Wbudowane mechanizmy:
-- ochrona przed **Replay Attack**,
-- **TOFU** (Trust On First Use) dla kluczy serwera,
-- ograniczanie sesji i rate‑limiting,
-- pełne szyfrowanie transportowe (TLS 1.3).
+</div>
 
 ---
 
-## 🖥️ Komponenty projektu
+# 🐈 Hub (Server)
 
-### 🐈 Hub (serwer)
-Centralny router protokołu:
-- nasłuchuje na QUIC/TLS,
-- zarządza sesjami,
-- obsługuje logowanie i rejestrację,
-- przekazuje zaszyfrowane ramki między klientami,
-- nie przechowuje treści wiadomości.
+Centralny element infrastruktury:
 
-### 💻 Klient CLI
-Terminalowy interfejs użytkownika:
+- obsługa QUIC + TLS 1.3,
+- zarządzanie sesjami,
+- logowanie i rejestracja,
+- przekazywanie zaszyfrowanych ramek,
+- rate limiting,
+- replay protection,
+- brak dostępu do treści wiadomości.
+
+<div align="center">
+  <img src="assets/img/hub.png" width="700">
+</div>
+
+---
+
+# 💻 CLI Client
+
+Nowoczesny klient terminalowy:
+
 - pełna obsługa protokołu,
-- komendy `/chat`, `/msg`, `/status`, `/secret`, `/logout`,
-- kolorowe logi i czytelny interfejs,
-- idealny do testów i debugowania.
+- kolorowe logi,
+- szybkie komendy,
+- idealny do debugowania,
+- niski narzut systemowy.
 
-### 🎨 Klient GUI (Fyne)
-Graficzna aplikacja desktopowa:
-- widok logowania,
-- widok menu,
-- widok czatu,
-- własny motyw kolorystyczny (Pink Theme),
-- zasoby (fonty, grafiki) osadzone w binarce.
+### Dostępne komendy
 
-Struktura GUI:
-```
+```bash
+/status <user>
+/secret <user>
+/chat <user> 
+/accept <user>
+/refuse <user>
+/msg <text>
+/end
+/logout
+/menu
+/help
+````
+
+<div align="center">
+  <img src="assets/img/meowssenger_cli_client.png" width="750">
+</div>
+
+---
+
+# 🎨 GUI Client (Fyne)
+
+Graficzna aplikacja desktopowa napisana w **Go + Fyne**.
+
+## Funkcje GUI
+
+* ✨ nowoczesny interfejs,
+* 🔐 ekran logowania,
+* 💬 widok czatu,
+* 🎨 custom Pink Theme,
+* 📦 osadzone zasoby i fonty,
+* ⚡ szybkie działanie natywne.
+
+<div align="center">
+  <img src="assets/img/meowssenger_gui_client.png" max-height: 40vw>
+</div>
+
+---
+
+# ⚡ Najważniejsze funkcje
+
+<div align="center">
+
+| Funkcja               | Opis                                  |
+| --------------------- | ------------------------------------- |
+| 🔐 E2EE               | End-to-End Encryption                 |
+| ⚡ QUIC                | Nowoczesny transport niskich opóźnień |
+| 🧩 JSON Frames        | Czytelna struktura ramek              |
+| 🛡️ Replay Protection | Ochrona przed Replay Attack           |
+| 🔑 TOFU               | Trust On First Use                    |
+| 🚀 TLS 1.3            | Pełne szyfrowanie transportu          |
+
+</div>
+
+---
+
+# 🧠 Technologie
+
+<p align="center">
+
+<img src="https://skillicons.dev/icons?i=go,postgres,docker,linux,git,github">
+
+</p>
+
+---
+
+# 📂 Struktura projektu
+
+```bash
 gui_src/
  ├── main.go
  ├── resources/
@@ -91,50 +196,79 @@ gui_src/
 
 ---
 
-## 📚 Dokumentacja
+# 📚 Dokumentacja
 
-Pełna dokumentacja protokołu znajduje się tutaj:  
-**[docs/KittyProtocol.pdf](docs/KittyProtocol.pdf)**
+Pełna dokumentacja protokołu: [KittyProtocol.pdf](docs/KittyProtocol.pdf)
 
 Zawiera:
-- opis ramek,
-- diagramy przepływu,
-- model bezpieczeństwa,
-- scenariusze komunikacji,
-- strukturę transportu QUIC.
+
+* architekturę,
+* diagramy przepływu,
+* model bezpieczeństwa,
+* strukturę ramek,
+* opis komunikacji,
+* analizę bezpieczeństwa.
 
 ---
 
-## 🚀 Uruchamianie Huba na Azure (skrót)
+# ☁️ Deployment — Azure Hub
 
-1. Utwórz VM (Ubuntu 22.04, B1s).  
-2. Otwórz port **UDP 9999** w Azure Networking.  
-3. Zainstaluj Go i PostgreSQL.  
-4. Skonfiguruj zmienne środowiskowe:
-   ```
-   export KITTY_DB_DSN="postgres://kitty:kittypass@localhost:5432/kittyhub?sslmode=disable"
-   export KITTY_INTERCEPT_ADDR="0.0.0.0:9999"
-   ```
-5. Uruchom:
-   ```
-   go run ./cmd/hub
-   ```
+## Szybkie uruchomienie
 
-Pełny samouczek wdrożenia dostępny w pliku [RemoteHubConfig.md](markdowns/RemoteHubConfig.md).
+### 1️⃣ Utwórz VM
+
+```bash
+Ubuntu 22.04 (B1s)
+```
+
+### 2️⃣ Otwórz port UDP
+
+```bash
+9999/UDP
+```
+
+### 3️⃣ Skonfiguruj ENV
+
+```bash
+export KITTY_DB_DSN="postgres://kitty:kittypass@localhost:5432/kittyhub?sslmode=disable"
+
+export KITTY_INTERCEPT_ADDR="0.0.0.0:9999"
+```
+
+### 4️⃣ Uruchom Hub
+
+```bash
+go run ./cmd/hub
+```
+
+**Pełna instrukcja konfiguracji huba dostępna [tutaj](markdowns/RemoteHubConfig.md)**
 
 ---
 
-## 👥 Autorzy
+# 👥 Autorzy
 
-Projekt został stworzony przez:
+<div align="center">
 
-- [Gabriela Błaut](https://github.com/gabbla05)  
-- [Michał Brzeziński](https://github.com/Michal-Brzezinski)  
-- [Aleksandra Gołek](https://github.com/styliana)
+| Autor             | GitHub                                                     |
+| ----------------- | ---------------------------------------------------------- |
+| Gabriela Błaut    | [@gabbla05](https://github.com/gabbla05)                   |
+| Michał Brzeziński | [@Michal-Brzezinski](https://github.com/Michal-Brzezinski) |
+| Aleksandra Gołek  | [@styliana](https://github.com/styliana)                   |
+
+</div>
 
 ---
 
-## 📄 Licencja
+# 📄 Licencja
 
-Projekt udostępniany na licencji MIT.
+Projekt udostępniany na **[licencji MIT](LICENSE)**.
 
+---
+
+<div align="center">
+
+<h2>Zostaw gwiazdkę jeśli projekt Ci się podoba! ⭐</h2>
+
+Made with 💖 by Kitty Protocol Team
+
+</div>
