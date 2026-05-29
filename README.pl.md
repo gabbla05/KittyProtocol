@@ -120,7 +120,7 @@ Zawiera:
    go run ./cmd/hub
    ```
 
-Pełny samouczek wdrożenia dostępny w dokumentacji projektu.
+Pełny samouczek wdrożenia dostępny w pliku [RemoteHubConfig.md](markdowns/RemoteHubConfig.md).
 
 ---
 

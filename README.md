@@ -1,3 +1,4 @@
+[🇬🇧 English version](README.md) | 🇵🇱 *Wersja polska*
 # Kitty Protocol x Meowssenger
 
 <div style="display: flex; gap: 5%; align-items: center; width: 100%;">
@@ -117,7 +118,7 @@ It includes:
    go run ./cmd/hub
    ```
 
-A full deployment guide is available in the project documentation.
+A full deployment guide is available in the markdown [RemoteHubConfig.md](markdowns/RemoteHubConfig.md) file.
 
 ---
 
