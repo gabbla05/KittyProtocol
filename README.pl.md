@@ -1,4 +1,4 @@
-[🇵🇱 Wersja polska](README.pl.md) | 🇬🇧 *English version*
+[🇬🇧 English version](README.md) | 🇵🇱 *Wersja polska*
 
 # Kitty Protocol x Meowssenger
 
