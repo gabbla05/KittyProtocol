@@ -8,6 +8,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
+
 	"github.com/gabbla05/KittyProtocol/gui_src/state"
 )
 
@@ -23,12 +24,14 @@ func GetChatView(s *state.UIState, target string) fyne.CanvasObject {
 	chatHistory.Wrapping = fyne.TextWrapWord
 	chatHistory.SetText("--- Chat Started ---\n")
 
-	// NASŁUCHIWANIE
-	s.UI.OnMessage = func(msg string) {
-		chatHistory.SetText(chatHistory.Text + msg + "\n")
+	// --- Odbiór wiadomości z backendu ---
+	s.UI.OnMessage = func(from string, text string) {
+		fyne.Do(func() {
+			chatHistory.SetText(chatHistory.Text + "[" + from + "]: " + text + "\n")
+		})
 	}
 
-	// --- Elementy sterujące ---
+	// --- Pole wpisywania wiadomości ---
 	msgEntry := widget.NewEntry()
 	msgEntry.SetPlaceHolder("Type your message here...")
 
@@ -38,12 +41,12 @@ func GetChatView(s *state.UIState, target string) fyne.CanvasObject {
 			return
 		}
 
-		err := s.App.SendTextMessage(text)
-		if err != nil {
+		if err := s.App.SendTextMessage(text); err != nil {
 			dialog.ShowError(err, s.Window)
 			return
 		}
 
+		// UI thread
 		chatHistory.SetText(chatHistory.Text + "[Me]: " + text + "\n")
 		msgEntry.SetText("")
 	})
@@ -56,8 +59,7 @@ func GetChatView(s *state.UIState, target string) fyne.CanvasObject {
 	})
 	endChatBtn.Importance = widget.DangerImportance
 
-	// --- Układ z wykorzystaniem formLayout ---
-	// Używamy tego samego layoutu co w auth/menu, aby zachować szerokość 350px
+	// --- Układ dolny ---
 	bottomBox := container.New(&formLayout{},
 		msgEntry,
 		sendBtn,
@@ -66,10 +68,9 @@ func GetChatView(s *state.UIState, target string) fyne.CanvasObject {
 	)
 
 	historyScroll := container.NewVScroll(chatHistory)
-	// Ustawiamy wysokość historii, aby zostawić miejsce na formularz
 	historyScroll.SetMinSize(fyne.NewSize(350, 300))
 
-	// Złożenie wszystkiego w całość
+	// --- Cały widok ---
 	return container.NewBorder(
 		container.NewPadded(container.NewCenter(titleText)),
 		container.NewCenter(container.NewPadded(bottomBox)),

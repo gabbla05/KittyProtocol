@@ -9,6 +9,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
+
 	"github.com/gabbla05/KittyProtocol/client/api"
 	"github.com/gabbla05/KittyProtocol/gui_src/resources"
 	"github.com/gabbla05/KittyProtocol/gui_src/state"
@@ -63,6 +64,7 @@ func GetMenuView(s *state.UIState) fyne.CanvasObject {
 			dialog.ShowInformation("Error", "Enter target username!", s.Window)
 			return
 		}
+
 		err := s.App.StartChatRequest(target)
 		if err != nil {
 			if errors.Is(err, api.ErrNoSharedSecret) {
@@ -72,8 +74,10 @@ func GetMenuView(s *state.UIState) fyne.CanvasObject {
 			}
 			return
 		}
-		// Po wysłaniu requestu po prostu przechodzimy do czatu (czekamy aż druga strona zaakceptuje)
-		s.SwitchView(GetChatView(s, target))
+
+		// 🔥 NIE przełączamy widoku tutaj!
+		// Czekamy na event "accept" z ChatEvents()
+		dialog.ShowInformation("Chat Request Sent", "Waiting for "+target+" to accept...", s.Window)
 	})
 
 	logoutBtn := widget.NewButton("Logout", func() {
@@ -93,11 +97,10 @@ func GetMenuView(s *state.UIState) fyne.CanvasObject {
 		widget.NewSeparator(),
 		widget.NewLabel("2. Actions:"),
 		statusBtn,
-		requestChatBtn, // <--- Zostawiliśmy tylko ten przycisk
+		requestChatBtn,
 		widget.NewSeparator(),
 		logoutBtn,
 	)
 
-	// Wyśrodkowanie całej zawartości
 	return container.NewCenter(container.NewPadded(menuContent))
 }

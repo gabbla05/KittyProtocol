@@ -50,7 +50,7 @@ func NewApp(c *api.KittyClient, ui UI, disconnected <-chan struct{}) *App {
 
 	a.attachCoreEventHandlers()
 
-	// Start chat event loop
+	// Start chat event loop (CLI logs + GUI events)
 	go a.chatBridge.Run(func(msg string) {
 		a.ui.Printf("\n%s\n", msg)
 		a.ui.Prompt()
@@ -127,24 +127,13 @@ func (a *App) InitSecretStoreForUser(username string, masterKey []byte) {
 	}
 }
 
-// High-level chat operations — thin wrappers delegating to ChatLogic.
-
-func (a *App) StartChatRequest(target string) error {
-	return a.chatLogic.StartChatRequest(target)
+func (a *App) ChatEvents() <-chan chat.ChatEvent {
+	return a.chatBridge.Events
 }
 
-func (a *App) AcceptChat(from string) error {
-	return a.chatLogic.AcceptChat(from)
-}
-
-func (a *App) RefuseChat(from, reason string) error {
-	return a.chatLogic.RefuseChat(from, reason)
-}
-
-func (a *App) EndChat(reason string) error {
-	return a.chatLogic.EndChat(reason)
-}
-
-func (a *App) SendTextMessage(text string) error {
-	return a.chatLogic.SendTextMessage(text)
-}
+// High-level chat operations
+func (a *App) StartChatRequest(target string) error { return a.chatLogic.StartChatRequest(target) }
+func (a *App) AcceptChat(from string) error         { return a.chatLogic.AcceptChat(from) }
+func (a *App) RefuseChat(from, reason string) error { return a.chatLogic.RefuseChat(from, reason) }
+func (a *App) EndChat(reason string) error          { return a.chatLogic.EndChat(reason) }
+func (a *App) SendTextMessage(text string) error    { return a.chatLogic.SendTextMessage(text) }

@@ -11,6 +11,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
+
 	"github.com/gabbla05/KittyProtocol/client/api"
 	"github.com/gabbla05/KittyProtocol/client/app"
 	"github.com/gabbla05/KittyProtocol/gui_src/resources"
@@ -98,17 +99,71 @@ func GetAuthView(s *state.UIState) fyne.CanvasObject {
 					return
 				}
 
-				log.Println("User authorized, switching to main menu!")
+				fyne.Do(func() {
+					log.Println("User authorized, switching to main menu!")
 
-				guiUI := &state.GuiUI{State: s} // <--- TUTAJ dodajemy referencję do stanu (State: s)
-				s.UI = guiUI
-				s.App = app.NewApp(s.Client, guiUI, disconnectedChan)
-				s.App.InitSecretStoreForUser(s.Client.User(), []byte(password))
+					guiUI := &state.GuiUI{State: s}
+					s.UI = guiUI
+					s.App = app.NewApp(s.Client, guiUI, disconnectedChan)
+					s.App.InitSecretStoreForUser(s.Client.User(), []byte(password))
 
-				go s.Client.StartPingLoop()
+					// --- PODPIĘCIE ZDARZEŃ CZATU ---
+					go func() {
+						for ev := range s.App.ChatEvents() {
+							switch ev.Type {
 
-				s.Window.Canvas().Refresh(s.Window.Content())
-				s.SwitchView(GetMenuView(s))
+							case "request":
+								fyne.Do(func() {
+									cnf := dialog.NewConfirm(
+										"Incoming Chat Request",
+										"User "+ev.From+" wants to chat with you.",
+										func(accept bool) {
+											if accept {
+												if err := s.App.AcceptChat(ev.From); err != nil {
+													dialog.ShowError(err, s.Window)
+													return
+												}
+												s.SwitchToChat(ev.From)
+											} else {
+												s.App.RefuseChat(ev.From, "User refused via GUI")
+											}
+										},
+										s.Window,
+									)
+									cnf.SetConfirmText("Accept")
+									cnf.SetDismissText("Refuse")
+									cnf.Show()
+								})
+
+							case "accept":
+								fyne.Do(func() {
+									s.SwitchToChat(ev.From)
+								})
+
+							case "refuse":
+								fyne.Do(func() {
+									dialog.ShowInformation("Chat Refused", ev.From+" refused: "+ev.Reason, s.Window)
+								})
+
+							case "end":
+								fyne.Do(func() {
+									dialog.ShowInformation("Chat Ended", ev.Reason, s.Window)
+									s.SwitchView(GetMenuView(s))
+								})
+
+							case "message":
+								if s.UI.OnMessage != nil {
+									fyne.Do(func() {
+										s.UI.OnMessage(ev.From, ev.Text)
+									})
+								}
+							}
+						}
+					}()
+
+					s.Window.Canvas().Refresh(s.Window.Content())
+					s.SwitchView(GetMenuView(s))
+				})
 
 			case <-time.After(authTimeout):
 				dialog.ShowInformation("Error", "AUTH timeout", s.Window)
@@ -164,7 +219,6 @@ func GetAuthView(s *state.UIState) fyne.CanvasObject {
 		}()
 	})
 
-	// Używamy globalnego formLayout
 	formContent := container.New(&formLayout{},
 		container.NewCenter(logo),
 		userEntry,
