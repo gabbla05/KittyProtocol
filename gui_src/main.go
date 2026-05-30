@@ -22,13 +22,20 @@ func main() {
     w.Resize(fyne.NewSize(400, 650))
     w.SetFixedSize(true) // TO BLOKUJE ZMIANĘ ROZMIARU
 
-	// Inicjalizacja klienta
+	// Inicjalizacja klienta (linijka 26)
 	kittyClient := api.NewKittyClient()
 
 	// Inicjalizacja stanu
 	stateObj := &state.UIState{
 		Window: w,
 		Client: kittyClient,
+	}
+	
+	stateObj.UI = &state.GuiUI{State: stateObj}
+
+	// NOWOŚĆ: Przekazujemy logikę przełączania widoku z parametrem docelowego użytkownika
+	stateObj.SwitchToChat = func(target string) {
+		stateObj.SwitchView(views.GetChatView(stateObj, target))
 	}
 	
 	w.SetContent(views.GetAuthView(stateObj))

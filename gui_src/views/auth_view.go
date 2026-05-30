@@ -100,7 +100,7 @@ func GetAuthView(s *state.UIState) fyne.CanvasObject {
 
 				log.Println("User authorized, switching to main menu!")
 
-				guiUI := &state.GuiUI{}
+				guiUI := &state.GuiUI{State: s} // <--- TUTAJ dodajemy referencję do stanu (State: s)
 				s.UI = guiUI
 				s.App = app.NewApp(s.Client, guiUI, disconnectedChan)
 				s.App.InitSecretStoreForUser(s.Client.User(), []byte(password))

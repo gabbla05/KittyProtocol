@@ -72,36 +72,8 @@ func GetMenuView(s *state.UIState) fyne.CanvasObject {
 			}
 			return
 		}
+		// Po wysłaniu requestu po prostu przechodzimy do czatu (czekamy aż druga strona zaakceptuje)
 		s.SwitchView(GetChatView(s, target))
-	})
-
-	acceptChatBtn := widget.NewButton("Accept Incoming", func() {
-		target := targetEntry.Text
-		if target == "" {
-			dialog.ShowInformation("Error", "Enter username!", s.Window)
-			return
-		}
-		err := s.App.AcceptChat(target)
-		if err != nil {
-			dialog.ShowError(err, s.Window)
-			return
-		}
-		s.SwitchView(GetChatView(s, target))
-	})
-
-	// --- NOWY PRZYCISK: REFUSE CHAT ---
-	refuseChatBtn := widget.NewButton("Refuse Incoming", func() {
-		target := targetEntry.Text
-		if target == "" {
-			dialog.ShowInformation("Error", "Enter username to refuse!", s.Window)
-			return
-		}
-		err := s.App.RefuseChat(target, "User refused via GUI")
-		if err != nil {
-			dialog.ShowError(err, s.Window)
-			return
-		}
-		dialog.ShowInformation("Success", "Chat request refused.", s.Window)
 	})
 
 	logoutBtn := widget.NewButton("Logout", func() {
@@ -121,9 +93,7 @@ func GetMenuView(s *state.UIState) fyne.CanvasObject {
 		widget.NewSeparator(),
 		widget.NewLabel("2. Actions:"),
 		statusBtn,
-		requestChatBtn,
-		acceptChatBtn,
-		refuseChatBtn, // <--- ADDED refuseChatBtn HERE
+		requestChatBtn, // <--- Zostawiliśmy tylko ten przycisk
 		widget.NewSeparator(),
 		logoutBtn,
 	)
