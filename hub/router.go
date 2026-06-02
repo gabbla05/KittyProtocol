@@ -16,7 +16,7 @@ import (
 // Returns true on success, false if delivery failed.
 func routeData(frame protocol.DataFrame, sender *protection.Session, senderStream protection.Stream) bool {
 	targetSess, ok := globalSessions.Get(frame.Target)
-	// router.go — poprawiony fragment
+
 	if !ok {
 		// ERR_15 — Unknown Target
 		sendError(senderStream, protocol.ErrUnknownTarget, "Unknown target user or user is offline")
