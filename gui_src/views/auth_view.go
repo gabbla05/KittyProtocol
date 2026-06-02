@@ -12,6 +12,7 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/gabbla05/KittyProtocol/client"
 	"github.com/gabbla05/KittyProtocol/client/api"
 	"github.com/gabbla05/KittyProtocol/client/app"
 	"github.com/gabbla05/KittyProtocol/gui_src/resources"
@@ -65,6 +66,8 @@ func GetAuthView(s *state.UIState) fyne.CanvasObject {
 	}
 
 	loginBtn := widget.NewButton("Login", func() {
+
+		client.LoadEnv()
 		username := userEntry.Text
 		password := passEntry.Text
 
@@ -175,6 +178,8 @@ func GetAuthView(s *state.UIState) fyne.CanvasObject {
 	})
 
 	registerBtn := widget.NewButton("Register", func() {
+		client.LoadEnv()
+
 		username := userEntry.Text
 		password := passEntry.Text
 
