@@ -110,7 +110,6 @@ func GetAuthView(s *state.UIState) fyne.CanvasObject {
 					// --- PODPIĘCIE ZDARZEŃ CZATU ---
 					go func() {
 						for ev := range s.App.ChatEvents() {
-							ev := ev
 							switch ev.Type {
 
 							case "request":
@@ -120,59 +119,6 @@ func GetAuthView(s *state.UIState) fyne.CanvasObject {
 										"User "+ev.From+" wants to chat with you.",
 										func(accept bool) {
 											if accept {
-												// 🔥 NOWA WALIDACJA - Blokuje akceptację bez zapisanego klucza 🔥
-												if !s.Client.HasSharedSecret(ev.From) {
-													// Brak sekretu — poproś użytkownika o wpisanie sekretu
-													win := fyne.CurrentApp().NewWindow("Save Shared Secret")
-													win.Resize(fyne.NewSize(360, 180))
-
-													secretEntryModal := widget.NewPasswordEntry()
-													secretEntryModal.SetPlaceHolder("Enter E2EE Shared Secret (min 16 chars)")
-													info := widget.NewLabel("No shared secret for " + ev.From + ". Enter it to accept chat.")
-
-													saveBtn := widget.NewButton("Save and Accept", func() {
-														secret := secretEntryModal.Text
-														if len(secret) < 16 {
-															dialog.ShowInformation("Error", "Secret must be at least 16 characters", win)
-															return
-														}
-														s.App.Secrets().Set(ev.From, []byte(secret))
-														_ = s.App.Client().SetSharedSecretForPeer(ev.From, []byte(secret))
-														win.Close()
-
-														// Sprawdzenie pending bezpośrednio przed AcceptChat (zabezpieczenie przed race condition)
-														if !s.App.ChatState().HasPendingFrom(ev.From) {
-															dialog.ShowInformation("Error", "Chat request from "+ev.From+" is no longer pending", s.Window)
-															return
-														}
-
-														if err := s.App.AcceptChat(ev.From); err != nil {
-															dialog.ShowError(err, s.Window)
-															return
-														}
-														s.SwitchToChat(ev.From)
-													})
-
-													cancelBtn := widget.NewButton("Cancel", func() {
-														win.Close()
-													})
-
-													win.SetContent(container.NewVBox(
-														info,
-														secretEntryModal,
-														container.NewHBox(saveBtn, cancelBtn),
-													))
-													win.Show()
-													return // Urywamy dalszą obsługę — akcję wykona okienko
-												}
-												// 🔥 KONIEC NOWEJ WALIDACJI 🔥
-
-												// Sprawdzenie pending przed wysłaniem akceptacji (zabezpieczenie przed race condition)
-												if !s.App.ChatState().HasPendingFrom(ev.From) {
-													dialog.ShowInformation("Error", "Chat request from "+ev.From+" is no longer pending", s.Window)
-													return
-												}
-
 												if err := s.App.AcceptChat(ev.From); err != nil {
 													dialog.ShowError(err, s.Window)
 													return

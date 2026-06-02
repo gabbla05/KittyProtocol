@@ -60,13 +60,8 @@ func GetMenuView(s *state.UIState) fyne.CanvasObject {
 
 	requestChatBtn := widget.NewButton("Request Chat", func() {
 		target := targetEntry.Text
-		secret := secretEntry.Text
-		if target == "" || secret == "" || len(secret) < 16 {
-			dialog.ShowInformation("Error", "Invalid data: Target username and 16-character Shared Secret are required.", s.Window)
-			return
-		}
-		if !s.App.Client().HasSharedSecret(target) {
-			dialog.ShowInformation("Error", "No shared secret saved for "+target+". Fill Target username and Shared Secret before requesting chat.", s.Window)
+		if target == "" {
+			dialog.ShowInformation("Error", "Enter target username!", s.Window)
 			return
 		}
 
