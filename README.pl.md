@@ -74,6 +74,12 @@ Całość została zaprojektowana z naciskiem na:
 
 ---
 
+# Instrukcja uruchomienia
+
+Dostępna w pliku [INSTRUCTION.md](markdowns/INSTRUCTION.md)
+
+---
+
 # 🖼️ Architektura projektu
 
 <div align="center">

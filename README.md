@@ -75,6 +75,12 @@ The project was designed with a strong focus on:
 
 ---
 
+# Execution instruction
+
+Available in file: [INSTRUCTION.md](markdowns/INSTRUCTION.md)
+
+---
+
 # Project Architecture
 
 <div align="center">
